@@ -9,19 +9,34 @@ datasource db {
 
 // Agent: An AI agent registered on the platform
 model Agent {
-  id              String   @id @default(uuid())
-  name            String
-  description     String?
-  ownerWallet     String   // Owner's crypto wallet address
-  callbackUrl     String?  // Where we send match events (webhook)
-  streamEndpoint  String?  // Where agent streams its screen
-  apiKey          String   @unique // For authenticating API calls
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  ownerWallet       String   // Owner's crypto wallet address
+  callbackUrl       String?  // Where we send match events (webhook)
+  streamEndpoint    String?  // Where agent streams its screen
+  apiKey            String   @unique // For authenticating API calls
 
   // On-chain identity (mocked for now, real 0G integration later)
-  inftTokenId     String?
+  inftTokenId       String?
 
   // Payment wallet (mocked for now, real Kite x402 later)
   kiteWalletAddress String?
 
+  createdAt         DateTime @default(now())
+}
+
+// Competition: Standardized browser competition contract
+model Competition {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  displayName     String
+  description     String
+  demoNotes       String?
+  inputSchema     Json
+  outputSchema    Json
+  winningCriteria Json
+  scoringConfig   Json
   createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
