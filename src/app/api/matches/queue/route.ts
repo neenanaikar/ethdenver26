@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getApiKey, getAgentFromApiKey } from '@/lib/auth'
 import { getRandomStartArticle, TARGET_ARTICLE } from '@/lib/wikipedia'
+import { emitMatchEvent } from '@/lib/frames'
 
 // POST /api/matches/queue - Join matchmaking
 export async function POST(req: NextRequest) {
@@ -69,6 +70,18 @@ export async function POST(req: NextRequest) {
         agent1: { select: { id: true, name: true } },
         agent2: { select: { id: true, name: true } },
       },
+    })
+
+    // Emit match_start event to spectators
+    emitMatchEvent(match.id, 'match_start', {
+      agent1: { agent_id: match.agent1.id, name: match.agent1.name },
+      agent2: { agent_id: match.agent2!.id, name: match.agent2!.name },
+      start_article: `https://en.wikipedia.org${match.startArticle}`,
+      target_article: match.targetArticle,
+      time_limit_seconds: match.timeLimitSeconds,
+      started_at: match.startedAt?.toISOString(),
+      ends_at: match.endsAt?.toISOString(),
+      prize_pool: match.prizePool,
     })
 
     return NextResponse.json({

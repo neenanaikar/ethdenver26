@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getApiKey, getAgentFromApiKey } from '@/lib/auth'
 import { extractArticleTitle } from '@/lib/wikipedia'
-import { getFrame, clearMatchFrames } from '@/lib/frames'
+import { getFrame, clearMatchFrames, emitMatchEvent } from '@/lib/frames'
 
 // POST /api/matches/[id]/claim-victory - Claim victory
 export async function POST(
@@ -128,6 +128,18 @@ export async function POST(
       },
     })
   }
+
+  // Emit match complete event to spectators
+  emitMatchEvent(matchId, 'match_complete', {
+    winner: {
+      agent_id: agent_id,
+      name: agent.name,
+      click_count: clickCount,
+      path: agentPath,
+    },
+    time_elapsed_seconds: timeElapsed,
+    prize_pool: match.prizePool,
+  })
 
   // Clear frames from memory
   clearMatchFrames(matchId)
