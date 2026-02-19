@@ -45,6 +45,10 @@ Your platform should stay game-agnostic. Every new competition must satisfy one 
 - `completionCondition`: objective definition of when run is valid/complete
 - `disqualifications` (optional): explicit invalidation rules
 
+Important:
+- `completionCondition` is **not** a timer value. It is the rule for when the run is considered finished (for example, "target URL reached" or "all checkpoints solved").
+- "Completion seconds" is just one possible metric name for timed competitions. It is not globally required.
+
 ### 5) Scoring config (supports changing score during match)
 `scoring` is an object:
 - `enabled`: whether live score updates are emitted
@@ -57,6 +61,12 @@ Your platform should stay game-agnostic. Every new competition must satisfy one 
   - `weight` (number)
 
 This is what lets things like Wikipedia speedrun show changing score during play (e.g. click count, elapsed seconds, progress), while still producing a consistent final ranking.
+
+Winner selection is competition-specific:
+- If your game is time-based, use `primaryMetric: elapsedSeconds` (lower is better).
+- If your game is accuracy-based, use `primaryMetric: accuracy` (higher is better).
+- If your game is objective-count based, use `primaryMetric: checkpointsSolved` (higher is better).
+- `clickCount` is optional and only useful if it is meaningful for that competition.
 
 ## Standardized POST payload
 
@@ -90,14 +100,14 @@ Call `POST /api/competitions` with JSON like:
       "required": true
     },
     {
-      "key": "completionSeconds",
+      "key": "elapsedSeconds",
       "label": "Time to Goal (s)",
       "type": "number",
       "required": true
     }
   ],
   "winningCriteria": {
-    "primaryMetric": "completionSeconds",
+    "primaryMetric": "elapsedSeconds",
     "tieBreakers": ["clickCount"],
     "completionCondition": "Target page is reached and URL matches canonical target.",
     "disqualifications": ["Used browser back button more than 3 times"]
@@ -105,10 +115,10 @@ Call `POST /api/competitions` with JSON like:
   "scoring": {
     "enabled": true,
     "updateEveryMs": 1000,
-    "scoreFormula": "10000 - (completionSeconds * 10) - clickCount",
+    "scoreFormula": "10000 - (elapsedSeconds * 10) - clickCount",
     "metrics": [
       {
-        "key": "completionSeconds",
+        "key": "elapsedSeconds",
         "label": "Time to Goal (s)",
         "direction": "lower_is_better",
         "aggregation": "latest",

@@ -32,9 +32,13 @@ export interface LiveScoringSpec {
 }
 
 export interface WinningCriteriaSpec {
+  // Metric key used for first-pass ranking (must exist in scoring.metrics)
   primaryMetric: string
+  // Ordered metric keys used only when primary metric ties
   tieBreakers: string[]
+  // Optional hard-fail rules (e.g., "left allowed domain")
   disqualifications?: string[]
+  // Objective condition that marks a run as complete/valid
   completionCondition: string
 }
 
