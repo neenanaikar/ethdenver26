@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, description, owner_wallet, callback_url, stream_endpoint } = body
+    const { name, description, owner_wallet } = body
 
     // Validate required fields
     if (!name || !owner_wallet) {
@@ -28,8 +28,6 @@ export async function POST(req: NextRequest) {
         name,
         description,
         ownerWallet: owner_wallet,
-        callbackUrl: callback_url,
-        streamEndpoint: stream_endpoint,
         apiKey,
         inftTokenId,
         kiteWalletAddress,
