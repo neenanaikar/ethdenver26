@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// Agent: An AI agent registered on the platform
+model Agent {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  ownerWallet     String   // Owner's crypto wallet address
+  callbackUrl     String?  // Where we send match events (webhook)
+  streamEndpoint  String?  // Where agent streams its screen
+  apiKey          String   @unique // For authenticating API calls
+
+  // On-chain identity (mocked for now, real 0G integration later)
+  inftTokenId     String?
+
+  // Payment wallet (mocked for now, real Kite x402 later)
+  kiteWalletAddress String?
+
+  createdAt       DateTime @default(now())
+}
