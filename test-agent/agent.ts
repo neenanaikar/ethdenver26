@@ -40,6 +40,7 @@ class WikiSpeedrunAgent {
   private targetArticle: string = ''
   private clickCount: number = 0
   private streaming: boolean = false
+  private lastFrameTime: number = 0
 
   async run() {
     try {
@@ -149,7 +150,7 @@ class WikiSpeedrunAgent {
   private async launchBrowser(): Promise<void> {
     this.browser = await chromium.launch({ headless: false })
     const context = await this.browser.newContext({
-      viewport: { width: 1280, height: 720 },
+      viewport: { width: 960, height: 540 },
     })
     this.page = await context.newPage()
     this.cdp = await this.page.context().newCDPSession(this.page)
@@ -161,8 +162,8 @@ class WikiSpeedrunAgent {
     // Enable CDP screencast
     await this.cdp.send('Page.startScreencast', {
       format: 'jpeg',
-      quality: 60,
-      everyNthFrame: 3,
+      quality: 40,
+      everyNthFrame: 10,
     })
 
     this.streaming = true
@@ -171,10 +172,15 @@ class WikiSpeedrunAgent {
     this.cdp.on('Page.screencastFrame', async (event) => {
       if (!this.streaming) return
 
-      // Acknowledge frame
+      // Acknowledge frame always (required by CDP)
       await this.cdp!.send('Page.screencastFrameAck', {
         sessionId: event.sessionId,
       })
+
+      // Throttle: skip if last frame was < 200ms ago (~5fps max)
+      const now = Date.now()
+      if (now - this.lastFrameTime < 200) return
+      this.lastFrameTime = now
 
       // Push frame to API
       await this.pushFrame(event.data)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { io, Socket } from 'socket.io-client'
 
@@ -181,12 +181,13 @@ export default function MatchPage() {
   const [chatInput, setChatInput] = useState('')
   const socketRef = useRef<Socket | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
   // Simulated viewer count
   const viewerCount = match?.status === 'active' ? Math.floor(Math.random() * 50) + 10 : 0
 
-  // Fetch match data helper
-  const fetchMatch = async () => {
+  // Stable fetch function
+  const fetchMatch = useCallback(async () => {
     try {
       const res = await fetch(`/api/matches/${matchId}`)
       if (!res.ok) throw new Error('Match not found')
@@ -203,19 +204,28 @@ export default function MatchPage() {
     } catch (err) {
       setError((err as Error).message)
     }
-  }
+  }, [matchId])
 
   // Fetch initial match data
   useEffect(() => {
     fetchMatch()
-  }, [matchId])
+  }, [fetchMatch])
 
-  // Poll while waiting for opponent (every 3s)
+  // Poll while waiting for opponent (every 3s) — single interval via ref
   useEffect(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
     if (match?.status !== 'waiting_for_opponent') return
-    const interval = setInterval(fetchMatch, 3000)
-    return () => clearInterval(interval)
-  }, [match?.status, matchId])
+    pollingRef.current = setInterval(fetchMatch, 3000)
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+  }, [match?.status, fetchMatch])
 
   // Socket.io connection
   useEffect(() => {
@@ -330,6 +340,10 @@ export default function MatchPage() {
   const agent1Path = match.agent1?.path || []
   const agent2Path = match.agent2?.path || []
   const isWaiting = match.status === 'waiting_for_opponent'
+  const bothReady = !!(
+    match.agent1 && match.agent2 &&
+    frames[match.agent1.agent_id] && frames[match.agent2.agent_id]
+  )
 
   // Get the ngrok/origin URL for the join command
   const apiBase = typeof window !== 'undefined' ? window.location.origin : ''
@@ -339,7 +353,32 @@ export default function MatchPage() {
       {/* LEFT: Streams side by side */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Streams row */}
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0 relative">
+
+          {/* Waiting for both agents overlay */}
+          {match.status === 'active' && !bothReady && (
+            <div className="absolute inset-0 bg-[#0e0e10] z-10 flex items-center justify-center">
+              <div className="text-center space-y-3">
+                <div className="w-6 h-6 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin mx-auto" />
+                <div className="text-[#adadb8] text-[13px] font-medium">Both agents connecting...</div>
+                <div className="text-[#848494] text-[11px] space-y-1">
+                  <div>
+                    {match.agent1 && frames[match.agent1.agent_id] ? '✓' : '○'}{' '}
+                    <span className={match.agent1 && frames[match.agent1.agent_id] ? 'text-[#9147ff]' : ''}>
+                      {match.agent1?.name || 'Agent 1'}
+                    </span>
+                  </div>
+                  <div>
+                    {match.agent2 && frames[match.agent2.agent_id] ? '✓' : '○'}{' '}
+                    <span className={match.agent2 && frames[match.agent2.agent_id] ? 'text-[#9147ff]' : ''}>
+                      {match.agent2?.name || 'Agent 2'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Agent 1 stream */}
           <StreamPanel
             agent={match.agent1}
