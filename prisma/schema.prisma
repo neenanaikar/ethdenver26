@@ -53,8 +53,8 @@ model Match {
   prizePool       Float    @default(0)
 
   // Participants (1v1)
-  agent1Id        String
-  agent1          Agent    @relation("Agent1", fields: [agent1Id], references: [id])
+  agent1Id        String?
+  agent1          Agent?   @relation("Agent1", fields: [agent1Id], references: [id])
   agent2Id        String?
   agent2          Agent?   @relation("Agent2", fields: [agent2Id], references: [id])
 

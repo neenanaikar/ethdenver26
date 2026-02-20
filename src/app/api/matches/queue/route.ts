@@ -43,17 +43,39 @@ export async function POST(req: NextRequest) {
     }, { status: 400 })
   }
 
-  // Look for a match waiting for an opponent
+  // Look for a match with an open slot for this agent
+  // agent2Id must be null (slot 2 open), and agent1Id must not be this agent
   const waitingMatch = await prisma.match.findFirst({
     where: {
       status: 'waiting_for_opponent',
-      agent1Id: { not: agentId }, // Can't play against yourself
+      agent2Id: null,
+      OR: [
+        { agent1Id: null },           // slot 1 is open (human-created match)
+        { agent1Id: { not: agentId } }, // slot 1 taken by someone else
+      ],
     },
     orderBy: { createdAt: 'asc' }, // First come, first served
   })
 
   if (waitingMatch) {
-    // Join as agent2 and start the match
+    // If slot 1 is empty (human-created match), fill it and keep waiting
+    if (!waitingMatch.agent1Id) {
+      await prisma.match.update({
+        where: { id: waitingMatch.id },
+        data: { agent1Id: agentId },
+      })
+
+      return NextResponse.json({
+        match_id: waitingMatch.id,
+        status: 'waiting_for_opponent',
+        start_article: `https://en.wikipedia.org${waitingMatch.startArticle}`,
+        target_article: waitingMatch.targetArticle,
+        time_limit_seconds: waitingMatch.timeLimitSeconds,
+        message: 'Joined as agent 1. Waiting for opponent.',
+      })
+    }
+
+    // Slot 1 is taken — fill slot 2 and start the match
     const now = new Date()
     const endsAt = new Date(now.getTime() + waitingMatch.timeLimitSeconds * 1000)
 
@@ -64,7 +86,7 @@ export async function POST(req: NextRequest) {
         status: 'active',
         prizePool: waitingMatch.entryFee * 2,
         startedAt: now,
-        endsAt: endsAt,
+        endsAt,
       },
       include: {
         agent1: { select: { id: true, name: true } },
@@ -74,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     // Emit match_start event to spectators
     emitMatchEvent(match.id, 'match_start', {
-      agent1: { agent_id: match.agent1.id, name: match.agent1.name },
+      agent1: { agent_id: match.agent1!.id, name: match.agent1!.name },
       agent2: { agent_id: match.agent2!.id, name: match.agent2!.name },
       start_article: `https://en.wikipedia.org${match.startArticle}`,
       target_article: match.targetArticle,
@@ -93,30 +115,27 @@ export async function POST(req: NextRequest) {
       started_at: match.startedAt?.toISOString(),
       ends_at: match.endsAt?.toISOString(),
       opponent: {
-        agent_id: match.agent1.id,
-        name: match.agent1.name,
+        agent_id: match.agent1!.id,
+        name: match.agent1!.name,
       },
       entry_fee_paid: match.entryFee,
       prize_pool: match.prizePool,
     })
   }
 
-  // No waiting match found - create a new one
+  // No waiting match — create a new one with this agent as agent1
   const startArticle = getRandomStartArticle()
-  const entryFee = 1.0 // Default entry fee
+  const entryFee = 1.0
 
   const match = await prisma.match.create({
     data: {
       agent1Id: agentId,
       status: 'waiting_for_opponent',
-      startArticle: startArticle,
+      startArticle,
       targetArticle: TARGET_ARTICLE,
-      timeLimitSeconds: 300, // 5 minutes
-      entryFee: entryFee,
-      prizePool: entryFee, // Just agent1's fee for now
-    },
-    include: {
-      agent1: { select: { id: true, name: true } },
+      timeLimitSeconds: 300,
+      entryFee,
+      prizePool: entryFee,
     },
   })
 
