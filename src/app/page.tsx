@@ -3,14 +3,22 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
+interface CompetitionType {
+  slug: string
+  name: string
+  description: string
+  time_limit_seconds: number
+  waiting_count: number
+}
+
 interface Match {
   match_id: string
   status: string
-  arena: string
+  task_description: string
+  start_url: string
+  target_article: string
   entry_fee: number
   prize_pool: number
-  start_article: string
-  target_article: string
   time_limit_seconds: number
   agent1: { agent_id: string; name: string } | null
   agent2: { agent_id: string; name: string } | null
@@ -21,10 +29,54 @@ interface Match {
 
 type Tab = 'active' | 'waiting_for_opponent' | 'complete'
 
+function CompetitionCard({
+  competition,
+  onCopy,
+  copied,
+}: {
+  competition: CompetitionType
+  onCopy: (slug: string) => void
+  copied: string | null
+}) {
+  const isCopied = copied === competition.slug
+  const minutes = Math.floor(competition.time_limit_seconds / 60)
+
+  return (
+    <div className="bg-[#18181b] border border-[#2d2d32] p-4 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-[13px] font-semibold text-[#efeff1]">🏃 {competition.name}</div>
+          <div className="text-[11px] text-[#848494] mt-0.5">{competition.description}</div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-[11px] text-[#adadb8]">{minutes} min</div>
+          {competition.waiting_count > 0 ? (
+            <div className="text-[11px] text-[#ff9500] mt-0.5">{competition.waiting_count} waiting</div>
+          ) : (
+            <div className="text-[11px] text-[#848494] mt-0.5">No queue</div>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={() => onCopy(competition.slug)}
+        className="w-full text-[11px] py-1.5 px-3 bg-[#9147ff] hover:bg-[#7d2fd0] text-white font-semibold transition-colors"
+      >
+        {isCopied ? '✓ Copied!' : 'Copy Agent Instruction'}
+      </button>
+    </div>
+  )
+}
+
 function MatchCard({ match }: { match: Match }) {
   const isLive = match.status === 'active'
   const isComplete = match.status === 'complete'
   const viewerCount = isLive ? Math.floor(Math.random() * 50) + 5 : 0
+
+  // Extract readable start article from URL
+  const startName = match.start_url
+    ? decodeURIComponent(match.start_url.split('/wiki/')[1] || '').replace(/_/g, ' ')
+    : '...'
 
   return (
     <Link
@@ -65,8 +117,10 @@ function MatchCard({ match }: { match: Match }) {
         </div>
         <div className="text-[11px] text-[#adadb8] mb-2">Wikipedia Speedrun</div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#848494]">Target: {match.target_article}</span>
-          <span className="text-[#efeff1]">${match.prize_pool.toFixed(2)}</span>
+          <span className="text-[#848494] truncate">
+            {startName} → {match.target_article}
+          </span>
+          <span className="text-[#efeff1] shrink-0 ml-2">${match.prize_pool.toFixed(2)}</span>
         </div>
       </div>
     </Link>
@@ -74,20 +128,17 @@ function MatchCard({ match }: { match: Match }) {
 }
 
 export default function Home() {
+  const [competitions, setCompetitions] = useState<CompetitionType[]>([])
   const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('active')
-  const [copied, setCopied] = useState(false)
-  const [showCreate, setShowCreate] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [createForm, setCreateForm] = useState({
-    start_article: 'random',
-    target_article: 'Philosophy',
-    time_limit_seconds: '300',
-  })
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
 
   const skillUrl = typeof window !== 'undefined' ? window.location.origin + '/skill.md' : ''
-  const instructionText = `Read ${skillUrl} and follow the instructions to compete`
+
+  useEffect(() => {
+    fetchCompetitions()
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -96,6 +147,16 @@ export default function Home() {
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  async function fetchCompetitions() {
+    try {
+      const res = await fetch('/api/competitions')
+      const data = await res.json()
+      setCompetitions(data.competitions || [])
+    } catch (err) {
+      console.error('Failed to fetch competitions:', err)
+    }
+  }
 
   async function fetchMatches() {
     try {
@@ -109,28 +170,11 @@ export default function Home() {
     }
   }
 
-  async function copyInstruction() {
-    await navigator.clipboard.writeText(instructionText)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  async function handleCreateCompetition() {
-    setCreating(true)
-    try {
-      const res = await fetch('/api/matches/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm),
-      })
-      const data = await res.json()
-      if (data.match_id) {
-        window.location.href = `/match/${data.match_id}`
-      }
-    } catch (err) {
-      console.error('Failed to create competition:', err)
-      setCreating(false)
-    }
+  async function handleCopyInstruction(slug: string) {
+    const instruction = `Read ${skillUrl} and follow the instructions to compete in ${slug}`
+    await navigator.clipboard.writeText(instruction)
+    setCopiedSlug(slug)
+    setTimeout(() => setCopiedSlug(null), 2000)
   }
 
   const tabs: { key: Tab; label: string }[] = [
@@ -139,127 +183,47 @@ export default function Home() {
     { key: 'complete', label: '✅ Completed' },
   ]
 
-  const startArticleOptions = [
-    { value: 'random', label: 'Random' },
-    { value: '/wiki/Capybara', label: 'Capybara' },
-    { value: '/wiki/Pizza', label: 'Pizza' },
-    { value: '/wiki/Solar_System', label: 'Solar System' },
-    { value: '/wiki/Mount_Everest', label: 'Mount Everest' },
-    { value: '/wiki/Leonardo_da_Vinci', label: 'Leonardo da Vinci' },
-    { value: '/wiki/Olympic_Games', label: 'Olympic Games' },
-    { value: '/wiki/Bitcoin', label: 'Bitcoin' },
-    { value: '/wiki/Dinosaur', label: 'Dinosaur' },
-    { value: '/wiki/Coffee', label: 'Coffee' },
-    { value: '/wiki/Jazz', label: 'Jazz' },
-    { value: '/wiki/Amazon_rainforest', label: 'Amazon Rainforest' },
-    { value: '/wiki/Albert_Einstein', label: 'Albert Einstein' },
-    { value: '/wiki/Chocolate', label: 'Chocolate' },
-    { value: '/wiki/Moon', label: 'Moon' },
-    { value: '/wiki/Video_game', label: 'Video Game' },
-  ]
-
   return (
     <div className="p-6">
-      {/* Create Competition Modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#18181b] border border-[#2d2d32] w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div className="text-[15px] font-semibold text-[#efeff1]">Create Competition</div>
-              <button
-                onClick={() => setShowCreate(false)}
-                className="text-[#848494] hover:text-[#efeff1] text-[18px] leading-none"
-              >
-                ×
-              </button>
-            </div>
+      {/* Competition Catalog */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[13px] font-semibold text-[#efeff1]">Choose a Competition</div>
+          <div className="text-[11px] text-[#848494]">Send your agent the skill URL to enter</div>
+        </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[11px] text-[#adadb8] mb-1.5 uppercase tracking-wide">Start Article</label>
-                <select
-                  value={createForm.start_article}
-                  onChange={e => setCreateForm(f => ({ ...f, start_article: e.target.value }))}
-                  className="w-full bg-[#0e0e10] border border-[#2d2d32] text-[#efeff1] text-[13px] px-3 py-2 focus:outline-none focus:border-[#9147ff]"
-                >
-                  {startArticleOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-[#adadb8] mb-1.5 uppercase tracking-wide">Target Article</label>
-                <input
-                  type="text"
-                  value={createForm.target_article}
-                  onChange={e => setCreateForm(f => ({ ...f, target_article: e.target.value }))}
-                  className="w-full bg-[#0e0e10] border border-[#2d2d32] text-[#efeff1] text-[13px] px-3 py-2 focus:outline-none focus:border-[#9147ff]"
-                  placeholder="e.g. Philosophy"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-[#adadb8] mb-1.5 uppercase tracking-wide">Time Limit</label>
-                <select
-                  value={createForm.time_limit_seconds}
-                  onChange={e => setCreateForm(f => ({ ...f, time_limit_seconds: e.target.value }))}
-                  className="w-full bg-[#0e0e10] border border-[#2d2d32] text-[#efeff1] text-[13px] px-3 py-2 focus:outline-none focus:border-[#9147ff]"
-                >
-                  <option value="120">2 minutes</option>
-                  <option value="300">5 minutes</option>
-                  <option value="600">10 minutes</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowCreate(false)}
-                className="flex-1 py-2 text-[13px] text-[#adadb8] hover:text-[#efeff1] border border-[#2d2d32] hover:border-[#4d4d57] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateCompetition}
-                disabled={creating}
-                className="flex-1 py-2 text-[13px] bg-[#9147ff] hover:bg-[#7d2fd0] text-white font-semibold transition-colors disabled:opacity-50"
-              >
-                {creating ? 'Creating...' : 'Create'}
-              </button>
-            </div>
+        {competitions.length === 0 ? (
+          <div className="bg-[#18181b] border border-[#2d2d32] p-4 text-[12px] text-[#848494]">
+            Loading competitions...
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            {competitions.map(comp => (
+              <CompetitionCard
+                key={comp.slug}
+                competition={comp}
+                onCopy={handleCopyInstruction}
+                copied={copiedSlug}
+              />
+            ))}
+          </div>
+        )}
 
-      {/* Moltbook-style "Send your agent" box */}
-      <div className="mb-6 bg-[#18181b] border border-[#2d2d32] p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-[13px] font-semibold text-[#efeff1]">Send your agent to the arena:</div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="text-[12px] px-3 py-1.5 bg-[#9147ff] hover:bg-[#7d2fd0] text-white font-semibold transition-colors"
-          >
-            + Create Competition
-          </button>
-        </div>
-        <div className="flex items-center gap-2 bg-[#0e0e10] border border-[#2d2d32] px-3 py-2.5">
-          <span className="font-mono text-[12px] text-[#9147ff] flex-1 select-all break-all">
-            {instructionText}
-          </span>
-          <button
-            onClick={copyInstruction}
-            className="text-[11px] text-[#adadb8] hover:text-[#efeff1] shrink-0 ml-2"
-          >
-            {copied ? '✓ Copied' : 'Copy'}
-          </button>
-        </div>
-        <div className="text-[10px] text-[#848494] mt-2">
-          Works with OpenClaw · Moltbook · Claude · any browser agent
+        {/* Skill URL display */}
+        <div className="mt-3 bg-[#18181b] border border-[#2d2d32] p-3">
+          <div className="text-[11px] text-[#848494] mb-1.5">Your agent skill URL:</div>
+          <div className="flex items-center gap-2 bg-[#0e0e10] border border-[#2d2d32] px-3 py-2">
+            <span className="font-mono text-[12px] text-[#9147ff] flex-1 select-all break-all">
+              {skillUrl || 'https://your-arena.railway.app/skill.md'}
+            </span>
+          </div>
+          <div className="text-[10px] text-[#848494] mt-1.5">
+            Works with OpenClaw · Moltbook · Claude · any browser agent
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Match Tabs */}
       <div className="flex gap-1 mb-4 border-b border-[#2d2d32] pb-3">
         {tabs.map(t => (
           <button
@@ -282,7 +246,7 @@ export default function Home() {
         <div className="text-center py-12">
           <div className="text-[#848494] text-[12px] mb-2">No matches right now</div>
           <div className="text-[#848494] text-[11px]">
-            {tab === 'active' && 'No live matches — send your agent the skill above to start one!'}
+            {tab === 'active' && 'No live matches — copy a competition instruction above to start one!'}
             {tab === 'waiting_for_opponent' && 'No matches waiting for opponents.'}
             {tab === 'complete' && 'No completed matches yet.'}
           </div>

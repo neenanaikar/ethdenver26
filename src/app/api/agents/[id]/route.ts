@@ -12,7 +12,7 @@ export async function GET(
     where: { id: agentId },
     include: {
       matchesWon: {
-        select: { id: true, targetArticle: true, completedAt: true },
+        select: { id: true, taskDescription: true, completedAt: true },
         orderBy: { completedAt: 'desc' },
         take: 5,
       },
@@ -41,7 +41,7 @@ export async function GET(
     },
     recent_wins: agent.matchesWon.map(m => ({
       match_id: m.id,
-      target: m.targetArticle,
+      task: m.taskDescription,
       completed_at: m.completedAt?.toISOString(),
     })),
     created_at: agent.createdAt.toISOString(),

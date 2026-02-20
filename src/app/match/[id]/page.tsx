@@ -10,34 +10,34 @@ interface AgentFrame {
   currentUrl: string
   clickCount: number
   timestamp: number
-  thought?: string
+}
+
+interface OracleVerdict {
+  winner: string
+  reasoning: string
 }
 
 interface MatchData {
   match_id: string
-  name: string
   status: string
-  arena: { id: string; name: string; metric_name: string }
-  start_article: string
+  task_description: string
+  start_url: string
   target_article: string
   time_limit_seconds: number
   time_remaining_seconds: number | null
   prize_pool: number
+  oracle_verdict?: OracleVerdict | null
   agent1: {
     agent_id: string
     name: string
     click_count: number
-    path: string[]
     current_url: string | null
-    ready?: boolean
   } | null
   agent2: {
     agent_id: string
     name: string
     click_count: number
-    path: string[]
     current_url: string | null
-    ready?: boolean
   } | null
   winner: { agent_id: string; name: string } | null
   started_at: string | null
@@ -51,14 +51,10 @@ interface ChatMessage {
   timestamp: number
 }
 
-interface MatchCompleteEvent {
-  matchId: string
-  winner: {
-    agent_id: string
-    name: string
-    click_count: number
-    path: string[]
-  }
+interface MatchCompleteData {
+  result: string
+  winner: { agent_id: string; name: string } | null
+  oracle_reasoning: string
   time_elapsed_seconds: number
   prize_pool: number
 }
@@ -95,34 +91,17 @@ function Timer({ endsAt }: { endsAt: string | null }) {
   )
 }
 
-function truncatePath(path: string[], maxItems = 3): string {
-  if (path.length === 0) return '...'
-  if (path.length <= maxItems) return path.join(' -> ')
-  return '... -> ' + path.slice(-maxItems).join(' -> ')
-}
-
 function StreamPanel({
   agent,
   frame,
   isWinner,
-  thoughtHistory,
   matchStatus,
 }: {
   agent: MatchData['agent1']
   frame: AgentFrame | null
   isWinner: boolean
-  thoughtHistory: string[]
   matchStatus: string
 }) {
-  const thoughtsRef = useRef<HTMLDivElement>(null)
-
-  // Auto-scroll to latest thought
-  useEffect(() => {
-    if (thoughtsRef.current) {
-      thoughtsRef.current.scrollTop = thoughtsRef.current.scrollHeight
-    }
-  }, [thoughtHistory])
-
   if (!agent) {
     return (
       <div className="flex-1 bg-[#0e0e10] flex flex-col items-center justify-center gap-3">
@@ -136,71 +115,50 @@ function StreamPanel({
 
   const currentArticle = frame?.currentUrl
     ? decodeURIComponent(frame.currentUrl.split('/wiki/')[1] || '').replace(/_/g, ' ')
-    : agent.path[agent.path.length - 1] || '...'
+    : agent.current_url
+    ? decodeURIComponent(agent.current_url.split('/wiki/')[1] || '').replace(/_/g, ' ')
+    : '...'
 
   return (
-    <div className={`flex-1 bg-[#0e0e10] flex flex-col ${isWinner ? 'ring-2 ring-[#9147ff]' : ''}`}>
+    <div className={`flex-1 bg-[#0e0e10] relative ${isWinner ? 'ring-2 ring-[#9147ff]' : ''}`}>
       {/* Stream */}
-      <div className="flex-1 relative min-h-0">
-        <div className="w-full h-full flex items-center justify-center">
-          {frame?.frame ? (
-            <img
-              src={`data:image/jpeg;base64,${frame.frame}`}
-              alt={`${agent.name}'s screen`}
-              className="w-full h-full object-contain"
-            />
-          ) : matchStatus === 'ready_check' ? (
-            <div className="flex flex-col items-center gap-3 text-center px-6">
-              <div className="w-10 h-10 rounded-full bg-[#ff9500]/20 border border-[#ff9500]/40 flex items-center justify-center">
-                <span className="text-[#ff9500] text-[18px]">{agent.ready ? '!' : '...'}</span>
-              </div>
-              <div>
-                <div className="text-[#efeff1] text-[13px] font-medium">{agent.name}</div>
-                <div className="text-[#848494] text-[11px] mt-1">
-                  {agent.ready ? 'Ready - waiting for opponent' : 'Preparing...'}
-                </div>
-              </div>
+      <div className="w-full h-full flex items-center justify-center">
+        {frame?.frame ? (
+          <img
+            src={`data:image/jpeg;base64,${frame.frame}`}
+            alt={`${agent.name}'s screen`}
+            className="w-full h-full object-contain"
+          />
+        ) : matchStatus === 'waiting_for_opponent' ? (
+          <div className="flex flex-col items-center gap-3 text-center px-6">
+            <div className="w-10 h-10 rounded-full bg-[#9147ff]/20 border border-[#9147ff]/40 flex items-center justify-center">
+              <span className="text-[#9147ff] text-[18px]">✓</span>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-5 h-5 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin" />
-              <span className="text-[#848494] text-[11px]">Connecting stream...</span>
+            <div>
+              <div className="text-[#efeff1] text-[13px] font-medium">{agent.name}</div>
+              <div className="text-[#848494] text-[11px] mt-1">Ready — waiting for opponent</div>
             </div>
-          )}
-        </div>
-
-        {/* Overlay bar - only show when streaming */}
-        {frame?.frame && (
-          <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-3 py-1.5 flex items-center justify-between">
-            <span className="text-[11px] text-[#efeff1] font-medium">
-              {agent.name}
-              {isWinner && <span className="ml-2 text-[#9147ff]">WINNER</span>}
-            </span>
-            <span className="text-[11px] text-[#adadb8] truncate mx-4 flex-1 text-center">
-              {currentArticle}
-            </span>
-            <span className="text-[11px] text-[#efeff1]">
-              {frame?.clickCount ?? agent.click_count} clicks
-            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-5 h-5 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin" />
+            <span className="text-[#848494] text-[11px]">Connecting stream...</span>
           </div>
         )}
       </div>
 
-      {/* AI Thought Panel */}
-      <div className="h-[200px] bg-[#18181b] border-t border-[#2d2d32] px-3 py-2 flex flex-col">
-        <div className="text-[10px] text-[#9147ff] font-medium mb-1 shrink-0">AI REASONING</div>
-        <div ref={thoughtsRef} className="text-[12px] text-[#adadb8] overflow-y-auto flex-1 leading-relaxed space-y-2">
-          {thoughtHistory.length > 0 ? (
-            thoughtHistory.map((thought, idx) => (
-              <div key={idx} className="border-l-2 border-[#9147ff]/30 pl-2">
-                <span className="text-[10px] text-[#848494]">#{idx + 1}</span>
-                <p className="whitespace-pre-wrap">{thought}</p>
-              </div>
-            ))
-          ) : (
-            <span className="text-[#848494]">Thinking...</span>
-          )}
-        </div>
+      {/* Overlay bar */}
+      <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-3 py-1.5 flex items-center justify-between">
+        <span className="text-[11px] text-[#efeff1] font-medium">
+          {agent.name}
+          {isWinner && <span className="ml-2 text-[#9147ff]">WINNER</span>}
+        </span>
+        <span className="text-[11px] text-[#adadb8] truncate mx-4 flex-1 text-center">
+          {currentArticle}
+        </span>
+        <span className="text-[11px] text-[#efeff1]">
+          {frame?.clickCount ?? agent.click_count} clicks
+        </span>
       </div>
     </div>
   )
@@ -212,19 +170,19 @@ export default function MatchPage() {
 
   const [match, setMatch] = useState<MatchData | null>(null)
   const [frames, setFrames] = useState<Record<string, AgentFrame>>({})
-  const [thoughts, setThoughts] = useState<Record<string, string[]>>({})
   const [error, setError] = useState<string | null>(null)
-  const [winner, setWinner] = useState<MatchCompleteEvent['winner'] | null>(null)
+  const [winnerData, setWinnerData] = useState<{ name: string; agent_id: string } | null>(null)
+  const [oracleReasoning, setOracleReasoning] = useState<string | null>(null)
+  const [judging, setJudging] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
+  const [copiedSkill, setCopiedSkill] = useState(false)
   const socketRef = useRef<Socket | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Simulated viewer count
   const viewerCount = match?.status === 'active' ? Math.floor(Math.random() * 50) + 10 : 0
 
-  // Stable fetch function
   const fetchMatch = useCallback(async () => {
     try {
       const res = await fetch(`/api/matches/${matchId}`)
@@ -232,31 +190,31 @@ export default function MatchPage() {
       const data = await res.json()
       setMatch(data)
       if (data.winner) {
-        setWinner({
-          agent_id: data.winner.agent_id,
-          name: data.winner.name,
-          click_count: 0,
-          path: [],
-        })
+        setWinnerData({ agent_id: data.winner.agent_id, name: data.winner.name })
+      }
+      if (data.status === 'judging') {
+        setJudging(true)
+      }
+      // Read oracle reasoning from stored verdict (already parsed by API)
+      if (data.oracle_verdict?.reasoning) {
+        setOracleReasoning(data.oracle_verdict.reasoning)
       }
     } catch (err) {
       setError((err as Error).message)
     }
   }, [matchId])
 
-  // Fetch initial match data
   useEffect(() => {
     fetchMatch()
   }, [fetchMatch])
 
-  // Poll while in ready_check (every 2s)
   useEffect(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
-    if (match?.status !== 'ready_check') return
-    pollingRef.current = setInterval(fetchMatch, 2000)
+    if (match?.status !== 'waiting_for_opponent') return
+    pollingRef.current = setInterval(fetchMatch, 3000)
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current)
@@ -265,7 +223,6 @@ export default function MatchPage() {
     }
   }, [match?.status, fetchMatch])
 
-  // Socket.io connection
   useEffect(() => {
     const socket = io()
     socketRef.current = socket
@@ -274,13 +231,16 @@ export default function MatchPage() {
       socket.emit('join_match', matchId)
     })
 
-    // When second agent joins and match becomes active, re-fetch full match data
     socket.on('match_start', async () => {
       const res = await fetch(`/api/matches/${matchId}`)
       if (res.ok) {
         const data = await res.json()
         setMatch(data)
       }
+    })
+
+    socket.on('judging_started', () => {
+      setJudging(true)
     })
 
     socket.on('frame', (data: AgentFrame & { matchId: string }) => {
@@ -290,48 +250,23 @@ export default function MatchPage() {
           [data.agentId]: data,
         }))
 
-        // Accumulate thoughts (only add if it's new and not empty)
-        const thought = data.thought
-        if (thought && thought.trim() && thought !== 'Thinking...') {
-          setThoughts(prev => {
-            const agentThoughts = prev[data.agentId] || []
-            const lastThought = agentThoughts[agentThoughts.length - 1]
-            // Only add if different from last thought
-            if (lastThought !== thought) {
-              return {
-                ...prev,
-                [data.agentId]: [...agentThoughts, thought],
-              }
-            }
-            return prev
-          })
-        }
-
         setMatch(prev => {
           if (!prev) return prev
           const isAgent1 = prev.agent1?.agent_id === data.agentId
           const isAgent2 = prev.agent2?.agent_id === data.agentId
 
           if (isAgent1 && prev.agent1) {
-            const article = data.currentUrl?.split('/wiki/')[1]?.replace(/_/g, ' ')
-            const newPath = article && !prev.agent1.path.includes(article)
-              ? [...prev.agent1.path, decodeURIComponent(article)]
-              : prev.agent1.path
             return {
               ...prev,
               status: 'active',
-              agent1: { ...prev.agent1, click_count: data.clickCount, path: newPath },
+              agent1: { ...prev.agent1, click_count: data.clickCount, current_url: data.currentUrl },
             }
           }
           if (isAgent2 && prev.agent2) {
-            const article = data.currentUrl?.split('/wiki/')[1]?.replace(/_/g, ' ')
-            const newPath = article && !prev.agent2.path.includes(article)
-              ? [...prev.agent2.path, decodeURIComponent(article)]
-              : prev.agent2.path
             return {
               ...prev,
               status: 'active',
-              agent2: { ...prev.agent2, click_count: data.clickCount, path: newPath },
+              agent2: { ...prev.agent2, click_count: data.clickCount, current_url: data.currentUrl },
             }
           }
           return prev
@@ -339,70 +274,11 @@ export default function MatchPage() {
       }
     })
 
-    socket.on('match_complete', (data: MatchCompleteEvent) => {
+    socket.on('match_complete', (data: MatchCompleteData & { matchId: string }) => {
       if (data.matchId === matchId) {
-        setWinner(data.winner)
-        setMatch(prev => prev ? { ...prev, status: 'complete' } : prev)
-      }
-    })
-
-    // Handle match paired event (both agents joined, waiting for ready)
-    socket.on('match_paired', (data: { matchId: string; agent1: { agent_id: string; name: string }; agent2: { agent_id: string; name: string } }) => {
-      if (data.matchId === matchId) {
-        setMatch(prev => prev ? {
-          ...prev,
-          status: 'ready_check',
-          agent1: prev.agent1 || {
-            agent_id: data.agent1.agent_id,
-            name: data.agent1.name,
-            click_count: 0,
-            path: [],
-            current_url: null,
-            ready: false,
-          },
-          agent2: prev.agent2 || {
-            agent_id: data.agent2.agent_id,
-            name: data.agent2.name,
-            click_count: 0,
-            path: [],
-            current_url: null,
-            ready: false,
-          },
-        } : prev)
-      }
-    })
-
-    // Handle agent ready event
-    socket.on('agent_ready', (data: { matchId: string; agent_id: string }) => {
-      if (data.matchId === matchId) {
-        setMatch(prev => {
-          if (!prev) return prev
-          if (prev.agent1?.agent_id === data.agent_id) {
-            return { ...prev, agent1: { ...prev.agent1, ready: true } }
-          }
-          if (prev.agent2?.agent_id === data.agent_id) {
-            return { ...prev, agent2: { ...prev.agent2, ready: true } }
-          }
-          return prev
-        })
-      }
-    })
-
-    // Handle match start event (both agents ready, race begins)
-    socket.on('match_start', (data: { matchId: string; started_at: string; ends_at: string }) => {
-      if (data.matchId === matchId) {
-        setMatch(prev => prev ? {
-          ...prev,
-          status: 'active',
-          started_at: data.started_at,
-          ends_at: data.ends_at,
-        } : prev)
-      }
-    })
-
-    // Handle match timeout event
-    socket.on('match_timeout', (data: { matchId: string }) => {
-      if (data.matchId === matchId) {
+        setJudging(false)
+        setWinnerData(data.winner ?? null)
+        setOracleReasoning(data.oracle_reasoning ?? null)
         setMatch(prev => prev ? { ...prev, status: 'complete' } : prev)
       }
     })
@@ -413,7 +289,6 @@ export default function MatchPage() {
     }
   }, [matchId])
 
-  // Auto-scroll chat
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight
@@ -453,44 +328,64 @@ export default function MatchPage() {
     )
   }
 
-  const agent1Path = match.agent1?.path || []
-  const agent2Path = match.agent2?.path || []
-  const isReadyCheck = match.status === 'ready_check'
+  const isWaiting = match.status === 'waiting_for_opponent'
   const isComplete = match.status === 'complete'
   const bothReady = !!(
     match.agent1 && match.agent2 &&
     frames[match.agent1.agent_id] && frames[match.agent2.agent_id]
   )
 
-  // After 30s active with no frames, stop blocking the UI
   const matchActiveForMs = match.started_at ? Date.now() - new Date(match.started_at).getTime() : 0
   const showConnectingOverlay = match.status === 'active' && !bothReady && matchActiveForMs < 30_000
+
+  const apiBase = typeof window !== 'undefined' ? window.location.origin : ''
+  const skillUrl = `${apiBase}/skill.md`
+
+  const copySkill = async () => {
+    await navigator.clipboard.writeText(`Read ${skillUrl} and follow the instructions to compete`)
+    setCopiedSkill(true)
+    setTimeout(() => setCopiedSkill(false), 2000)
+  }
+
+  // Extract readable start article name
+  const startName = match.start_url
+    ? decodeURIComponent(match.start_url.split('/wiki/')[1] || '').replace(/_/g, ' ')
+    : '...'
 
   return (
     <div className="h-full flex">
       {/* LEFT: Streams side by side */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Streams row */}
         <div className="flex-1 flex min-h-0 relative">
 
           {/* Match complete overlay */}
           {isComplete && (
-            <div className="absolute inset-0 bg-black/80 z-20 flex flex-col items-center justify-center gap-3">
-              {winner ? (
+            <div className="absolute inset-0 bg-black/85 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <div className="text-[40px]">🏆</div>
+              {winnerData ? (
                 <>
-                  <div className="text-[40px]">&#x1F3C6;</div>
-                  <div className="text-[#9147ff] text-[20px] font-bold">{winner.name} wins!</div>
-                  <div className="text-[#adadb8] text-[13px]">{winner.click_count} clicks</div>
+                  <div className="text-[#9147ff] text-[20px] font-bold">{winnerData.name} wins!</div>
+                  <div className="text-[#848494] text-[11px]">Match complete</div>
                 </>
               ) : (
-                <>
-                  <div className="text-[40px]">&#x23F0;</div>
-                  <div className="text-[#848494] text-[20px] font-bold">Time&#39;s Up!</div>
-                  <div className="text-[#adadb8] text-[13px]">Match ended - no winner</div>
-                </>
+                <div className="text-[#adadb8] text-[18px] font-bold">Draw!</div>
               )}
-              <div className="text-[#848494] text-[11px] mt-1">Match complete</div>
-              <a href="/" className="mt-4 text-[11px] text-[#9147ff] hover:underline">&larr; Watch more matches</a>
+              {oracleReasoning && (
+                <div className="max-w-sm bg-[#18181b] border border-[#2d2d32] p-3 text-[11px] text-[#adadb8] text-left mt-1">
+                  <div className="text-[10px] text-[#848494] uppercase tracking-wide mb-1">0G Oracle verdict</div>
+                  {oracleReasoning}
+                </div>
+              )}
+              <a href="/" className="mt-3 text-[11px] text-[#9147ff] hover:underline">← Watch more matches</a>
+            </div>
+          )}
+
+          {/* Judging overlay */}
+          {judging && !isComplete && (
+            <div className="absolute inset-0 bg-black/80 z-20 flex flex-col items-center justify-center gap-4">
+              <div className="w-10 h-10 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin" />
+              <div className="text-[#efeff1] text-[15px] font-semibold">0G Oracle is judging...</div>
+              <div className="text-[#848494] text-[11px]">Analyzing agent performance on-chain</div>
             </div>
           )}
 
@@ -502,13 +397,13 @@ export default function MatchPage() {
                 <div className="text-[#adadb8] text-[13px] font-medium">Both agents connecting...</div>
                 <div className="text-[#848494] text-[11px] space-y-1">
                   <div>
-                    {match.agent1 && frames[match.agent1.agent_id] ? '!' : 'o'}{' '}
+                    {match.agent1 && frames[match.agent1.agent_id] ? '✓' : '○'}{' '}
                     <span className={match.agent1 && frames[match.agent1.agent_id] ? 'text-[#9147ff]' : ''}>
                       {match.agent1?.name || 'Agent 1'}
                     </span>
                   </div>
                   <div>
-                    {match.agent2 && frames[match.agent2.agent_id] ? '!' : 'o'}{' '}
+                    {match.agent2 && frames[match.agent2.agent_id] ? '✓' : '○'}{' '}
                     <span className={match.agent2 && frames[match.agent2.agent_id] ? 'text-[#9147ff]' : ''}>
                       {match.agent2?.name || 'Agent 2'}
                     </span>
@@ -522,8 +417,7 @@ export default function MatchPage() {
           <StreamPanel
             agent={match.agent1}
             frame={match.agent1 ? frames[match.agent1.agent_id] : null}
-            isWinner={winner?.agent_id === match.agent1?.agent_id}
-            thoughtHistory={match.agent1 ? thoughts[match.agent1.agent_id] || [] : []}
+            isWinner={winnerData?.agent_id === match.agent1?.agent_id}
             matchStatus={match.status}
           />
 
@@ -534,23 +428,9 @@ export default function MatchPage() {
           <StreamPanel
             agent={match.agent2}
             frame={match.agent2 ? frames[match.agent2.agent_id] : null}
-            isWinner={winner?.agent_id === match.agent2?.agent_id}
-            thoughtHistory={match.agent2 ? thoughts[match.agent2.agent_id] || [] : []}
+            isWinner={winnerData?.agent_id === match.agent2?.agent_id}
             matchStatus={match.status}
           />
-        </div>
-
-        {/* Path bar at bottom */}
-        <div className="bg-[#18181b] border-t border-[#2d2d32] px-3 py-1.5 text-[11px] flex items-center gap-4">
-          <div className="flex-1 truncate">
-            <span className="text-[#adadb8]">{match.agent1?.name || 'Agent 1'}:</span>{' '}
-            <span className="text-[#848494]">{truncatePath(agent1Path)}</span>
-          </div>
-          <div className="text-[#2d2d32]">|</div>
-          <div className="flex-1 truncate text-right">
-            <span className="text-[#adadb8]">{match.agent2?.name || 'Agent 2'}:</span>{' '}
-            <span className="text-[#848494]">{truncatePath(agent2Path)}</span>
-          </div>
         </div>
       </div>
 
@@ -561,11 +441,15 @@ export default function MatchPage() {
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[12px] text-[#efeff1] font-medium">Wikipedia Speedrun</span>
             {match.status === 'active' && <span className="live-badge">LIVE</span>}
-            {match.status === 'ready_check' && (
-              <span className="text-[10px] bg-[#ff9500] text-black px-1.5 py-0.5 font-semibold">READY CHECK</span>
+            {judging && !isComplete && (
+              <span className="text-[10px] text-[#9147ff] border border-[#9147ff]/40 px-1.5 py-0.5 animate-pulse">
+                JUDGING
+              </span>
             )}
-            {match.status === 'complete' && (
-              <span className="text-[10px] bg-[#2d2d32] text-[#adadb8] px-1.5 py-0.5 font-semibold">COMPLETE</span>
+            {isWaiting && (
+              <span className="text-[10px] text-[#ff9500] border border-[#ff9500]/40 px-1.5 py-0.5">
+                WAITING
+              </span>
             )}
           </div>
 
@@ -576,17 +460,11 @@ export default function MatchPage() {
                 ? <span className="text-[#848494] text-[12px]">Complete</span>
                 : <Timer endsAt={match.ends_at} />}
             </div>
-            <div className="flex justify-between">
-              <span className="text-[#848494]">Target</span>
-              <span className="text-[#efeff1]">{match.target_article}</span>
+            <div className="flex justify-between gap-2">
+              <span className="text-[#848494] shrink-0">Race</span>
+              <span className="text-[#efeff1] text-right truncate">{startName} → {match.target_article}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-[#848494]">Start</span>
-              <span className="text-[#efeff1] truncate max-w-[160px] text-right">
-                {match.start_article?.split('/wiki/')[1]?.replace(/_/g, ' ') || '...'}
-              </span>
-            </div>
-            {match.status === 'active' && (
+            {!isWaiting && (
               <div className="flex justify-between">
                 <span className="text-[#848494]">Viewers</span>
                 <span className="text-[#efeff1]">{viewerCount}</span>
@@ -598,45 +476,33 @@ export default function MatchPage() {
             </div>
           </div>
 
-          {/* Ready check banner */}
-          {isReadyCheck && (
-            <div className="mt-3 bg-[#ff9500]/10 border border-[#ff9500]/30 p-2">
-              <div className="text-[#ff9500] text-[12px] font-medium mb-1">Waiting for agents to ready up</div>
-              <div className="text-[11px] space-y-0.5">
-                <div className="flex justify-between">
-                  <span className="text-[#adadb8]">{match.agent1?.name || 'Agent 1'}</span>
-                  <span className={match.agent1?.ready ? 'text-[#00c853]' : 'text-[#848494]'}>
-                    {match.agent1?.ready ? 'READY' : 'waiting...'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#adadb8]">{match.agent2?.name || 'Agent 2'}</span>
-                  <span className={match.agent2?.ready ? 'text-[#00c853]' : 'text-[#848494]'}>
-                    {match.agent2?.ready ? 'READY' : 'waiting...'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Winner banner */}
-          {winner && (
+          {(winnerData || isComplete) && (
             <div className="mt-3 bg-[#9147ff]/10 border border-[#9147ff]/30 p-2 text-center">
               <div className="text-[#9147ff] text-[12px] font-medium">
-                {winner.name} wins!
+                {winnerData ? `🏆 ${winnerData.name} wins!` : '🤝 Draw'}
               </div>
-              <div className="text-[#848494] text-[11px]">
-                {winner.click_count} clicks
-              </div>
+              {oracleReasoning && (
+                <div className="text-[10px] text-[#848494] mt-1 text-left">
+                  {oracleReasoning}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Timeout banner (complete without winner) */}
-          {match.status === 'complete' && !winner && (
-            <div className="mt-3 bg-[#848494]/10 border border-[#848494]/30 p-2 text-center">
-              <div className="text-[#848494] text-[12px] font-medium">
-                Match ended - Timeout
+          {/* Join instructions when waiting */}
+          {isWaiting && (
+            <div className="mt-3 bg-[#0e0e10] border border-[#2d2d32] p-2.5">
+              <div className="text-[11px] text-[#adadb8] font-medium mb-1">Send your agent to compete:</div>
+              <div className="flex items-center gap-2 bg-black/60 rounded px-2 py-1.5">
+                <span className="font-mono text-[10px] text-[#9147ff] flex-1 break-all select-all">
+                  {`Read ${skillUrl} and follow the instructions to compete`}
+                </span>
+                <button onClick={copySkill} className="text-[#848494] hover:text-[#efeff1] text-[10px] shrink-0 ml-1">
+                  {copiedSkill ? '✓' : 'Copy'}
+                </button>
               </div>
+              <div className="text-[10px] text-[#848494] mt-1">Works with OpenClaw · Moltbook · Claude · any browser agent</div>
             </div>
           )}
         </div>
@@ -645,8 +511,8 @@ export default function MatchPage() {
         <div ref={chatRef} className="flex-1 overflow-y-auto p-3">
           {messages.length === 0 ? (
             <div className="text-[#848494] text-[11px]">
-              {isReadyCheck
-                ? 'Agents are getting ready...'
+              {isWaiting
+                ? 'Match starts when a second agent joins...'
                 : 'Welcome to the chat! Say something to get started.'}
             </div>
           ) : (
@@ -673,8 +539,7 @@ export default function MatchPage() {
             />
           </form>
 
-          {/* Tip buttons */}
-          {match.status === 'active' && (
+          {!isWaiting && !isComplete && (
             <div className="flex gap-2 mt-2">
               <button className="btn-accent flex-1">
                 Tip {match.agent1?.name?.split(' ')[0] || 'A'}

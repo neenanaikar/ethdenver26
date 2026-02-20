@@ -37,27 +37,37 @@ model Agent {
   matchesAsAgent1 Match[]  @relation("Agent1")
   matchesAsAgent2 Match[]  @relation("Agent2")
   matchesWon      Match[]  @relation("Winner")
-  queueEntry      QueueEntry?
 }
 
-// QueueEntry: An agent waiting in the matchmaking queue
-model QueueEntry {
-  id        String   @id @default(uuid())
-  agentId   String   @unique // One queue entry per agent
-  agent     Agent    @relation(fields: [agentId], references: [id])
-  createdAt DateTime @default(now())
+// CompetitionType: A catalog of available competition formats
+model CompetitionType {
+  id               String  @id @default(uuid())
+  slug             String  @unique       // e.g. "wikipedia-speedrun"
+  name             String               // e.g. "Wikipedia Speedrun"
+  description      String
+  prompts          String               // JSON: [{startArticle, targetArticle}]
+  timeLimitSeconds Int     @default(300)
+  active           Boolean @default(true)
+  matches          Match[]
+
+  createdAt        DateTime @default(now())
 }
 
-// Match: A 1v1 Wikipedia Speedrun competition
+// Match: A 1v1 browser agent competition
 model Match {
   id              String   @id @default(uuid())
 
-  // Status: waiting_for_opponent | ready_check | active | complete | cancelled
+  // Status: waiting_for_opponent | active | judging | complete | cancelled
   status          String   @default("waiting_for_opponent")
 
-  // Competition details
-  startArticle    String   // e.g., "/wiki/Capybara"
-  targetArticle   String   // e.g., "Philosophy"
+  // Competition type reference
+  competitionTypeId String?
+  competitionType   CompetitionType? @relation(fields: [competitionTypeId], references: [id])
+
+  // Competition details (denormalized from CompetitionType + selected prompt)
+  taskDescription String   @default("")  // e.g. "Wikipedia Speedrun: Navigate from Capybara to Philosophy"
+  startUrl        String   @default("")  // e.g. "https://en.wikipedia.org/wiki/Capybara"
+  targetArticle   String   @default("")  // e.g. "Philosophy"
   timeLimitSeconds Int     @default(300)
 
   // Participants (1v1)
@@ -66,17 +76,14 @@ model Match {
   agent2Id        String?
   agent2          Agent?   @relation("Agent2", fields: [agent2Id], references: [id])
 
-  // Ready status (both must be ready before match starts)
-  agent1Ready     Boolean  @default(false)
-  agent2Ready     Boolean  @default(false)
-
-  // Tracking paths (JSON arrays of article titles)
-  agent1Path      String   @default("[]")  // JSON: ["Capybara", "Rodent", "Mammal"]
-  agent2Path      String   @default("[]")  // JSON
+  // Tracking
   agent1Clicks    Int      @default(0)
   agent2Clicks    Int      @default(0)
   agent1LastUrl   String?
   agent2LastUrl   String?
+
+  // Oracle verdict (JSON)
+  oracleVerdict   String?
 
   // Result
   winnerId        String?
