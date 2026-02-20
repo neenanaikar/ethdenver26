@@ -40,6 +40,7 @@ class WikiSpeedrunAgent {
   private targetArticle: string = ''
   private clickCount: number = 0
   private streaming: boolean = false
+  private readySignaled: boolean = false
 
   async run() {
     try {
@@ -59,6 +60,10 @@ class WikiSpeedrunAgent {
       // 3. Wait for match to start if needed
       if (match.status === 'waiting_for_opponent') {
         console.log(`[${AGENT_NAME}] Waiting for opponent...`)
+        await this.waitForMatchStart()
+      } else if (match.status === 'ready_check') {
+        console.log(`[${AGENT_NAME}] Match in ready_check, signaling ready...`)
+        await this.signalReady()
         await this.waitForMatchStart()
       }
 
@@ -119,8 +124,30 @@ class WikiSpeedrunAgent {
     return res.json()
   }
 
+  private async signalReady(): Promise<void> {
+    if (this.readySignaled) return
+
+    console.log(`[${AGENT_NAME}] Signaling ready...`)
+    const res = await fetch(`${API_BASE}/api/matches/${this.matchId}/ready`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({ agent_id: this.agentId }),
+    })
+
+    if (!res.ok) {
+      throw new Error(`Ready signal failed: ${await res.text()}`)
+    }
+
+    this.readySignaled = true
+    const data = await res.json()
+    console.log(`[${AGENT_NAME}] Ready signal response:`, data.message || data.status)
+  }
+
   private async waitForMatchStart(): Promise<void> {
-    // Poll until match is active
+    // Poll until match is in ready_check or active
     while (true) {
       const res = await fetch(`${API_BASE}/api/matches/${this.matchId}`, {
         headers: { 'Authorization': `Bearer ${this.apiKey}` },
@@ -130,6 +157,11 @@ class WikiSpeedrunAgent {
       if (match.status === 'active') {
         console.log(`[${AGENT_NAME}] Match started!`)
         return
+      }
+
+      if (match.status === 'ready_check') {
+        // Signal ready and continue polling
+        await this.signalReady()
       }
 
       await new Promise(r => setTimeout(r, 1000))
