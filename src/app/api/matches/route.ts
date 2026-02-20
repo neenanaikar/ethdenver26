@@ -6,6 +6,15 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status') // Optional filter
 
+  // Auto-expire stale active matches whose time limit has passed
+  await prisma.match.updateMany({
+    where: {
+      status: 'active',
+      endsAt: { lt: new Date() },
+    },
+    data: { status: 'complete', completedAt: new Date() },
+  })
+
   const where = status
     ? { status }
     : { status: { in: ['waiting_for_opponent', 'active'] } }

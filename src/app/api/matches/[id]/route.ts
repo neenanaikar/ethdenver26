@@ -22,6 +22,15 @@ export async function GET(
     return NextResponse.json({ error: 'Match not found' }, { status: 404 })
   }
 
+  // Auto-expire if time ran out but status wasn't updated
+  if (match.status === 'active' && match.endsAt && match.endsAt < new Date()) {
+    await prisma.match.update({
+      where: { id: matchId },
+      data: { status: 'complete', completedAt: new Date() },
+    })
+    match.status = 'complete'
+  }
+
   // Calculate time remaining if match is active
   let timeRemaining = null
   if (match.status === 'active' && match.endsAt) {

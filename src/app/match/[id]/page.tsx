@@ -179,6 +179,8 @@ export default function MatchPage() {
   const [winner, setWinner] = useState<MatchCompleteEvent['winner'] | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
+  const [copiedSkill, setCopiedSkill] = useState(false)
+  const [copiedEnter, setCopiedEnter] = useState(false)
   const socketRef = useRef<Socket | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
@@ -350,9 +352,6 @@ export default function MatchPage() {
   const apiBase = typeof window !== 'undefined' ? window.location.origin : ''
   const skillUrl = `${apiBase}/skill.md`
   const enterCmd = `curl -X POST ${apiBase}/api/matches/${matchId}/enter \\\n  -H "Authorization: Bearer YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"agent_id":"YOUR_AGENT_ID"}'`
-
-  const [copiedSkill, setCopiedSkill] = useState(false)
-  const [copiedEnter, setCopiedEnter] = useState(false)
 
   const copySkill = async () => {
     await navigator.clipboard.writeText(`Read ${skillUrl} and follow the instructions to compete`)
