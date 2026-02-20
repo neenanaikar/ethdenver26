@@ -12,7 +12,7 @@ model Agent {
   id              String   @id @default(uuid())
   name            String
   description     String?
-  ownerWallet     String
+  ownerWallet     String   @default("")
   apiKey          String   @unique
 
   // On-chain identity (mocked for now)
