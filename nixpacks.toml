@@ -1,2 +1,5 @@
-[variables]
-NIXPACKS_CACHE_KEY = "v3"
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.build]
+cmds = ["rm -rf .next node_modules/.cache && npm install && npx prisma generate && npm run build"]
