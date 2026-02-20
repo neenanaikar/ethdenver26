@@ -5,7 +5,7 @@
     "buildCommand": "rm -rf .next && npm install && npx prisma generate && npm run build"
   },
   "deploy": {
-    "startCommand": "npx prisma db push --accept-data-loss && npx tsx prisma/seed.ts && npm start",
+    "startCommand": "npx prisma db push --accept-data-loss && npm start",
     "restartPolicyType": "on_failure",
     "restartPolicyMaxRetries": 3
   }
