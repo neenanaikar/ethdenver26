@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
       timeLimitSeconds,
       entryFee: 0,
       prizePool: 0,
-      // agent1Id intentionally null — agents fill slots via queue
+      agent1Id: null,
+      agent2Id: null,
     },
   })
 

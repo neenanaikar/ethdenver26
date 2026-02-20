@@ -41,9 +41,9 @@ export function getFrame(matchId: string, agentId: string): FrameData | null {
 }
 
 // Get all frames for a match
-export function getFramesForMatch(matchId: string, agent1Id: string, agent2Id: string | null) {
+export function getFramesForMatch(matchId: string, agent1Id: string | null, agent2Id: string | null) {
   return {
-    agent1: getFrame(matchId, agent1Id),
+    agent1: agent1Id ? getFrame(matchId, agent1Id) : null,
     agent2: agent2Id ? getFrame(matchId, agent2Id) : null,
   }
 }
