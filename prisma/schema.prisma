@@ -34,6 +34,15 @@ model Agent {
   matchesAsAgent1 Match[]  @relation("Agent1")
   matchesAsAgent2 Match[]  @relation("Agent2")
   matchesWon      Match[]  @relation("Winner")
+  queueEntry      QueueEntry?
+}
+
+// QueueEntry: An agent waiting in the matchmaking queue
+model QueueEntry {
+  id        String   @id @default(uuid())
+  agentId   String   @unique // One queue entry per agent
+  agent     Agent    @relation(fields: [agentId], references: [id])
+  createdAt DateTime @default(now())
 }
 
 // Match: A 1v1 Wikipedia Speedrun competition
@@ -53,8 +62,8 @@ model Match {
   prizePool       Float    @default(0)
 
   // Participants (1v1)
-  agent1Id        String
-  agent1          Agent    @relation("Agent1", fields: [agent1Id], references: [id])
+  agent1Id        String?
+  agent1          Agent?   @relation("Agent1", fields: [agent1Id], references: [id])
   agent2Id        String?
   agent2          Agent?   @relation("Agent2", fields: [agent2Id], references: [id])
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { io, Socket } from 'socket.io-client'
 
@@ -97,8 +97,8 @@ function Timer({ endsAt }: { endsAt: string | null }) {
 
 function truncatePath(path: string[], maxItems = 3): string {
   if (path.length === 0) return '...'
-  if (path.length <= maxItems) return path.join(' → ')
-  return '... → ' + path.slice(-maxItems).join(' → ')
+  if (path.length <= maxItems) return path.join(' -> ')
+  return '... -> ' + path.slice(-maxItems).join(' -> ')
 }
 
 function StreamPanel({
@@ -106,11 +106,13 @@ function StreamPanel({
   frame,
   isWinner,
   thoughtHistory,
+  matchStatus,
 }: {
   agent: MatchData['agent1']
   frame: AgentFrame | null
   isWinner: boolean
   thoughtHistory: string[]
+  matchStatus: string
 }) {
   const thoughtsRef = useRef<HTMLDivElement>(null)
 
@@ -123,11 +125,11 @@ function StreamPanel({
 
   if (!agent) {
     return (
-      <div className="flex-1 bg-[#0e0e10] flex flex-col">
-        <div className="flex-1 flex items-center justify-center">
-          <span className="text-[#848494] text-[11px]">Waiting for agent...</span>
+      <div className="flex-1 bg-[#0e0e10] flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-[#2d2d32] flex items-center justify-center">
+          <span className="text-[#848494] text-[16px]">?</span>
         </div>
-        <div className="h-[200px] bg-[#18181b] border-t border-[#2d2d32]" />
+        <span className="text-[#848494] text-[11px]">Waiting for opponent...</span>
       </div>
     )
   }
@@ -147,24 +149,41 @@ function StreamPanel({
               alt={`${agent.name}'s screen`}
               className="w-full h-full object-contain"
             />
+          ) : matchStatus === 'ready_check' ? (
+            <div className="flex flex-col items-center gap-3 text-center px-6">
+              <div className="w-10 h-10 rounded-full bg-[#ff9500]/20 border border-[#ff9500]/40 flex items-center justify-center">
+                <span className="text-[#ff9500] text-[18px]">{agent.ready ? '!' : '...'}</span>
+              </div>
+              <div>
+                <div className="text-[#efeff1] text-[13px] font-medium">{agent.name}</div>
+                <div className="text-[#848494] text-[11px] mt-1">
+                  {agent.ready ? 'Ready - waiting for opponent' : 'Preparing...'}
+                </div>
+              </div>
+            </div>
           ) : (
-            <span className="text-[#848494] text-[11px]">Waiting for stream...</span>
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-5 h-5 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin" />
+              <span className="text-[#848494] text-[11px]">Connecting stream...</span>
+            </div>
           )}
         </div>
 
-        {/* Overlay bar */}
-        <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-3 py-1.5 flex items-center justify-between">
-          <span className="text-[11px] text-[#efeff1] font-medium">
-            {agent.name}
-            {isWinner && <span className="ml-2 text-[#9147ff]">WINNER</span>}
-          </span>
-          <span className="text-[11px] text-[#adadb8] truncate mx-4 flex-1 text-center">
-            {currentArticle}
-          </span>
-          <span className="text-[11px] text-[#efeff1]">
-            {frame?.clickCount ?? agent.click_count} clicks
-          </span>
-        </div>
+        {/* Overlay bar - only show when streaming */}
+        {frame?.frame && (
+          <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-3 py-1.5 flex items-center justify-between">
+            <span className="text-[11px] text-[#efeff1] font-medium">
+              {agent.name}
+              {isWinner && <span className="ml-2 text-[#9147ff]">WINNER</span>}
+            </span>
+            <span className="text-[11px] text-[#adadb8] truncate mx-4 flex-1 text-center">
+              {currentArticle}
+            </span>
+            <span className="text-[11px] text-[#efeff1]">
+              {frame?.clickCount ?? agent.click_count} clicks
+            </span>
+          </div>
+        )}
       </div>
 
       {/* AI Thought Panel */}
@@ -200,32 +219,51 @@ export default function MatchPage() {
   const [chatInput, setChatInput] = useState('')
   const socketRef = useRef<Socket | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
   // Simulated viewer count
   const viewerCount = match?.status === 'active' ? Math.floor(Math.random() * 50) + 10 : 0
 
+  // Stable fetch function
+  const fetchMatch = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/matches/${matchId}`)
+      if (!res.ok) throw new Error('Match not found')
+      const data = await res.json()
+      setMatch(data)
+      if (data.winner) {
+        setWinner({
+          agent_id: data.winner.agent_id,
+          name: data.winner.name,
+          click_count: 0,
+          path: [],
+        })
+      }
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }, [matchId])
+
   // Fetch initial match data
   useEffect(() => {
-    async function fetchMatch() {
-      try {
-        const res = await fetch(`/api/matches/${matchId}`)
-        if (!res.ok) throw new Error('Match not found')
-        const data = await res.json()
-        setMatch(data)
-        if (data.winner) {
-          setWinner({
-            agent_id: data.winner.agent_id,
-            name: data.winner.name,
-            click_count: 0,
-            path: [],
-          })
-        }
-      } catch (err) {
-        setError((err as Error).message)
+    fetchMatch()
+  }, [fetchMatch])
+
+  // Poll while in ready_check (every 2s)
+  useEffect(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+    if (match?.status !== 'ready_check') return
+    pollingRef.current = setInterval(fetchMatch, 2000)
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
       }
     }
-    fetchMatch()
-  }, [matchId])
+  }, [match?.status, fetchMatch])
 
   // Socket.io connection
   useEffect(() => {
@@ -236,17 +274,21 @@ export default function MatchPage() {
       socket.emit('join_match', matchId)
     })
 
+    // When second agent joins and match becomes active, re-fetch full match data
+    socket.on('match_start', async () => {
+      const res = await fetch(`/api/matches/${matchId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMatch(data)
+      }
+    })
+
     socket.on('frame', (data: AgentFrame & { matchId: string }) => {
       if (data.matchId === matchId) {
         setFrames(prev => ({
           ...prev,
           [data.agentId]: data,
         }))
-
-        // Debug: log when we receive a thought
-        if (data.thought) {
-          console.log(`[Frame] Agent ${data.agentId} thought:`, data.thought.substring(0, 50))
-        }
 
         // Accumulate thoughts (only add if it's new and not empty)
         if (data.thought && data.thought.trim() && data.thought !== 'Thinking...') {
@@ -255,7 +297,6 @@ export default function MatchPage() {
             const lastThought = agentThoughts[agentThoughts.length - 1]
             // Only add if different from last thought
             if (lastThought !== data.thought) {
-              console.log(`[Thoughts] Adding new thought for ${data.agentId}:`, data.thought.substring(0, 50))
               return {
                 ...prev,
                 [data.agentId]: [...agentThoughts, data.thought],
@@ -277,6 +318,7 @@ export default function MatchPage() {
               : prev.agent1.path
             return {
               ...prev,
+              status: 'active',
               agent1: { ...prev.agent1, click_count: data.clickCount, path: newPath },
             }
           }
@@ -287,6 +329,7 @@ export default function MatchPage() {
               : prev.agent2.path
             return {
               ...prev,
+              status: 'active',
               agent2: { ...prev.agent2, click_count: data.clickCount, path: newPath },
             }
           }
@@ -308,6 +351,14 @@ export default function MatchPage() {
         setMatch(prev => prev ? {
           ...prev,
           status: 'ready_check',
+          agent1: prev.agent1 || {
+            agent_id: data.agent1.agent_id,
+            name: data.agent1.name,
+            click_count: 0,
+            path: [],
+            current_url: null,
+            ready: false,
+          },
           agent2: prev.agent2 || {
             agent_id: data.agent2.agent_id,
             name: data.agent2.name,
@@ -403,19 +454,76 @@ export default function MatchPage() {
 
   const agent1Path = match.agent1?.path || []
   const agent2Path = match.agent2?.path || []
+  const isReadyCheck = match.status === 'ready_check'
+  const isComplete = match.status === 'complete'
+  const bothReady = !!(
+    match.agent1 && match.agent2 &&
+    frames[match.agent1.agent_id] && frames[match.agent2.agent_id]
+  )
+
+  // After 30s active with no frames, stop blocking the UI
+  const matchActiveForMs = match.started_at ? Date.now() - new Date(match.started_at).getTime() : 0
+  const showConnectingOverlay = match.status === 'active' && !bothReady && matchActiveForMs < 30_000
 
   return (
     <div className="h-full flex">
       {/* LEFT: Streams side by side */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Streams row */}
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0 relative">
+
+          {/* Match complete overlay */}
+          {isComplete && (
+            <div className="absolute inset-0 bg-black/80 z-20 flex flex-col items-center justify-center gap-3">
+              {winner ? (
+                <>
+                  <div className="text-[40px]">&#x1F3C6;</div>
+                  <div className="text-[#9147ff] text-[20px] font-bold">{winner.name} wins!</div>
+                  <div className="text-[#adadb8] text-[13px]">{winner.click_count} clicks</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[40px]">&#x23F0;</div>
+                  <div className="text-[#848494] text-[20px] font-bold">Time&#39;s Up!</div>
+                  <div className="text-[#adadb8] text-[13px]">Match ended - no winner</div>
+                </>
+              )}
+              <div className="text-[#848494] text-[11px] mt-1">Match complete</div>
+              <a href="/" className="mt-4 text-[11px] text-[#9147ff] hover:underline">&larr; Watch more matches</a>
+            </div>
+          )}
+
+          {/* Waiting for both agents overlay */}
+          {showConnectingOverlay && (
+            <div className="absolute inset-0 bg-[#0e0e10] z-10 flex items-center justify-center">
+              <div className="text-center space-y-3">
+                <div className="w-6 h-6 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin mx-auto" />
+                <div className="text-[#adadb8] text-[13px] font-medium">Both agents connecting...</div>
+                <div className="text-[#848494] text-[11px] space-y-1">
+                  <div>
+                    {match.agent1 && frames[match.agent1.agent_id] ? '!' : 'o'}{' '}
+                    <span className={match.agent1 && frames[match.agent1.agent_id] ? 'text-[#9147ff]' : ''}>
+                      {match.agent1?.name || 'Agent 1'}
+                    </span>
+                  </div>
+                  <div>
+                    {match.agent2 && frames[match.agent2.agent_id] ? '!' : 'o'}{' '}
+                    <span className={match.agent2 && frames[match.agent2.agent_id] ? 'text-[#9147ff]' : ''}>
+                      {match.agent2?.name || 'Agent 2'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Agent 1 stream */}
           <StreamPanel
             agent={match.agent1}
             frame={match.agent1 ? frames[match.agent1.agent_id] : null}
             isWinner={winner?.agent_id === match.agent1?.agent_id}
             thoughtHistory={match.agent1 ? thoughts[match.agent1.agent_id] || [] : []}
+            matchStatus={match.status}
           />
 
           {/* Divider */}
@@ -427,6 +535,7 @@ export default function MatchPage() {
             frame={match.agent2 ? frames[match.agent2.agent_id] : null}
             isWinner={winner?.agent_id === match.agent2?.agent_id}
             thoughtHistory={match.agent2 ? thoughts[match.agent2.agent_id] || [] : []}
+            matchStatus={match.status}
           />
         </div>
 
@@ -451,24 +560,37 @@ export default function MatchPage() {
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[12px] text-[#efeff1] font-medium">Wikipedia Speedrun</span>
             {match.status === 'active' && <span className="live-badge">LIVE</span>}
-            {match.status === 'ready_check' && <span className="text-[10px] bg-[#ff9500] text-black px-1.5 py-0.5 font-semibold">READY CHECK</span>}
-            {match.status === 'waiting_for_opponent' && <span className="text-[10px] bg-[#848494] text-black px-1.5 py-0.5 font-semibold">WAITING</span>}
-            {match.status === 'complete' && <span className="text-[10px] bg-[#2d2d32] text-[#adadb8] px-1.5 py-0.5 font-semibold">COMPLETE</span>}
+            {match.status === 'ready_check' && (
+              <span className="text-[10px] bg-[#ff9500] text-black px-1.5 py-0.5 font-semibold">READY CHECK</span>
+            )}
+            {match.status === 'complete' && (
+              <span className="text-[10px] bg-[#2d2d32] text-[#adadb8] px-1.5 py-0.5 font-semibold">COMPLETE</span>
+            )}
           </div>
 
           <div className="space-y-1 text-[11px]">
             <div className="flex justify-between">
               <span className="text-[#848494]">Time</span>
-              <Timer endsAt={match.ends_at} />
+              {isComplete
+                ? <span className="text-[#848494] text-[12px]">Complete</span>
+                : <Timer endsAt={match.ends_at} />}
             </div>
             <div className="flex justify-between">
               <span className="text-[#848494]">Target</span>
               <span className="text-[#efeff1]">{match.target_article}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#848494]">Viewers</span>
-              <span className="text-[#efeff1]">{viewerCount}</span>
+              <span className="text-[#848494]">Start</span>
+              <span className="text-[#efeff1] truncate max-w-[160px] text-right">
+                {match.start_article?.split('/wiki/')[1]?.replace(/_/g, ' ') || '...'}
+              </span>
             </div>
+            {match.status === 'active' && (
+              <div className="flex justify-between">
+                <span className="text-[#848494]">Viewers</span>
+                <span className="text-[#efeff1]">{viewerCount}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-[#848494]">Prize</span>
               <span className="text-[#efeff1]">${match.prize_pool.toFixed(2)}</span>
@@ -476,7 +598,7 @@ export default function MatchPage() {
           </div>
 
           {/* Ready check banner */}
-          {match.status === 'ready_check' && (
+          {isReadyCheck && (
             <div className="mt-3 bg-[#ff9500]/10 border border-[#ff9500]/30 p-2">
               <div className="text-[#ff9500] text-[12px] font-medium mb-1">Waiting for agents to ready up</div>
               <div className="text-[11px] space-y-0.5">
@@ -522,7 +644,9 @@ export default function MatchPage() {
         <div ref={chatRef} className="flex-1 overflow-y-auto p-3">
           {messages.length === 0 ? (
             <div className="text-[#848494] text-[11px]">
-              Welcome to the chat! Say something to get started.
+              {isReadyCheck
+                ? 'Agents are getting ready...'
+                : 'Welcome to the chat! Say something to get started.'}
             </div>
           ) : (
             <div className="space-y-0.5">
@@ -549,14 +673,16 @@ export default function MatchPage() {
           </form>
 
           {/* Tip buttons */}
-          <div className="flex gap-2 mt-2">
-            <button className="btn-accent flex-1">
-              Tip {match.agent1?.name?.split(' ')[0] || 'A'}
-            </button>
-            <button className="btn-accent flex-1">
-              Tip {match.agent2?.name?.split(' ')[0] || 'B'}
-            </button>
-          </div>
+          {match.status === 'active' && (
+            <div className="flex gap-2 mt-2">
+              <button className="btn-accent flex-1">
+                Tip {match.agent1?.name?.split(' ')[0] || 'A'}
+              </button>
+              <button className="btn-accent flex-1">
+                Tip {match.agent2?.name?.split(' ')[0] || 'B'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

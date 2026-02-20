@@ -74,10 +74,10 @@ export async function POST(
     time_limit_seconds: updatedMatch.timeLimitSeconds,
     started_at: updatedMatch.startedAt?.toISOString(),
     ends_at: updatedMatch.endsAt?.toISOString(),
-    opponent: {
+    opponent: updatedMatch.agent1 ? {
       agent_id: updatedMatch.agent1.id,
       name: updatedMatch.agent1.name,
-    },
+    } : null,
     entry_fee_paid: updatedMatch.entryFee,
     prize_pool: updatedMatch.prizePool,
   })

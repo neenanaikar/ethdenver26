@@ -37,29 +37,26 @@ class AIWikiAgent {
       await this.register()
       console.log(`[${AGENT_NAME}] Registered as ${this.agentId}`)
 
-      // 2. Join queue
+      // 2. Join queue and wait to be paired
       console.log(`[${AGENT_NAME}] Joining matchmaking queue...`)
-      const match = await this.joinQueue()
+      const match = await this.joinQueueAndWaitForPairing()
       this.matchId = match.match_id
       this.targetArticle = match.target_article
-      console.log(`[${AGENT_NAME}] Match: ${this.matchId}`)
+      console.log(`[${AGENT_NAME}] Paired! Match: ${this.matchId}`)
       console.log(`[${AGENT_NAME}] Start: ${match.start_article}`)
       console.log(`[${AGENT_NAME}] Target: ${this.targetArticle}`)
 
-      // 3. Launch browser early (to be ready)
+      // 3. Launch browser and go to start article
       console.log(`[${AGENT_NAME}] Launching browser...`)
       await this.launchBrowser()
       await this.page!.goto(match.start_article)
+      console.log(`[${AGENT_NAME}] Browser ready at start article`)
 
-      // 4. Wait for opponent if needed
-      if (match.status === 'waiting_for_opponent') {
-        console.log(`[${AGENT_NAME}] Waiting for opponent...`)
-        await this.waitForPairing()
-      }
-
-      // 5. Signal ready and wait for match to start
+      // 4. Signal ready
       console.log(`[${AGENT_NAME}] Signaling ready...`)
       await this.signalReady()
+
+      // 5. Wait for match to start (both agents ready)
       console.log(`[${AGENT_NAME}] Waiting for match to start...`)
       await this.waitForMatchStart()
 
@@ -93,7 +90,8 @@ class AIWikiAgent {
     this.apiKey = data.api_key
   }
 
-  private async joinQueue(): Promise<any> {
+  private async joinQueueAndWaitForPairing(): Promise<{ match_id: string; start_article: string; target_article: string }> {
+    // Join queue
     const res = await fetch(`${API_BASE}/api/matches/queue`, {
       method: 'POST',
       headers: {
@@ -102,21 +100,43 @@ class AIWikiAgent {
       },
       body: JSON.stringify({ agent_id: this.agentId }),
     })
-    if (!res.ok) throw new Error(`Join failed: ${await res.text()}`)
-    return res.json()
-  }
+    if (!res.ok) throw new Error(`Join queue failed: ${await res.text()}`)
 
-  private async waitForPairing(): Promise<void> {
+    const result = await res.json()
+
+    // If immediately paired, return match details
+    if (result.status === 'paired') {
+      return {
+        match_id: result.match_id,
+        start_article: result.start_article,
+        target_article: result.target_article,
+      }
+    }
+
+    // Otherwise poll until paired
+    console.log(`[${AGENT_NAME}] In queue, waiting for opponent...`)
     while (true) {
-      const res = await fetch(`${API_BASE}/api/matches/${this.matchId}`, {
+      await new Promise(r => setTimeout(r, 1000))
+
+      const checkRes = await fetch(`${API_BASE}/api/matches/queue`, {
+        method: 'GET',
         headers: { 'Authorization': `Bearer ${this.apiKey}` },
       })
-      const match = await res.json()
-      if (match.status === 'ready_check' || match.status === 'active') {
-        console.log(`[${AGENT_NAME}] Opponent found!`)
-        return
+
+      const checkResult = await checkRes.json()
+
+      if (checkResult.status === 'paired') {
+        // Fetch full match details
+        const matchRes = await fetch(`${API_BASE}/api/matches/${checkResult.match_id}`, {
+          headers: { 'Authorization': `Bearer ${this.apiKey}` },
+        })
+        const match = await matchRes.json()
+        return {
+          match_id: match.match_id,
+          start_article: match.start_article,
+          target_article: match.target_article,
+        }
       }
-      await new Promise(r => setTimeout(r, 1000))
     }
   }
 
