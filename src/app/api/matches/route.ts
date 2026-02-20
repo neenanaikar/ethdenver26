@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
       status: m.status,
       task_description: m.taskDescription,
       start_url: m.startUrl,
+      target_article: m.targetArticle,
       entry_fee: m.entryFee,
       prize_pool: m.prizePool,
       time_limit_seconds: m.timeLimitSeconds,

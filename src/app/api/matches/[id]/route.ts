@@ -54,6 +54,7 @@ export async function GET(
     status: match.status,
     task_description: match.taskDescription,
     start_url: match.startUrl,
+    target_article: match.targetArticle,
     time_limit_seconds: match.timeLimitSeconds,
     time_remaining_seconds: timeRemaining,
     entry_fee: match.entryFee,

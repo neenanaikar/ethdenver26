@@ -35,6 +35,20 @@ model Agent {
   matchesWon      Match[]  @relation("Winner")
 }
 
+// CompetitionType: A catalog of available competition formats
+model CompetitionType {
+  id               String  @id @default(uuid())
+  slug             String  @unique       // e.g. "wikipedia-speedrun"
+  name             String               // e.g. "Wikipedia Speedrun"
+  description      String
+  prompts          String               // JSON: [{startArticle, targetArticle}]
+  timeLimitSeconds Int     @default(300)
+  active           Boolean @default(true)
+  matches          Match[]
+
+  createdAt        DateTime @default(now())
+}
+
 // Match: A 1v1 browser agent competition
 model Match {
   id              String   @id @default(uuid())
@@ -42,9 +56,14 @@ model Match {
   // Status: waiting_for_opponent | active | judging | complete | cancelled
   status          String   @default("waiting_for_opponent")
 
-  // Competition details
-  taskDescription String                   // e.g. "Play GeoGuessr, get the highest score"
-  startUrl        String   @default("")    // Where agents open their browser (may be empty)
+  // Competition type reference
+  competitionTypeId String?
+  competitionType   CompetitionType? @relation(fields: [competitionTypeId], references: [id])
+
+  // Competition details (denormalized from CompetitionType + selected prompt)
+  taskDescription String   @default("")  // e.g. "Wikipedia Speedrun: Navigate from Capybara to Philosophy"
+  startUrl        String   @default("")  // e.g. "https://en.wikipedia.org/wiki/Capybara"
+  targetArticle   String   @default("")  // e.g. "Philosophy"
   timeLimitSeconds Int     @default(300)
 
   // Entry fee and prize

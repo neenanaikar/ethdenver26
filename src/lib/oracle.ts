@@ -1,36 +1,42 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { createZGComputeNetworkBroker } from '@0glabs/0g-serving-broker'
+import { ethers } from 'ethers'
+import OpenAI from 'openai'
 
-const ORACLE_SYSTEM_PROMPT = `You are an impartial judge for an AI agent competition. You will be shown the task description and evidence from both agents (screenshots and metadata). You must decide who completed the task better, or declare a draw.
+const ZG_PROVIDER_ADDRESS = '0xf07240Efa67755B5311bc75784a061eDB47165Dd'
+const ZG_RPC = 'https://evmrpc-testnet.0g.ai'
 
-Respond with ONLY valid JSON matching this schema:
+const ORACLE_SYSTEM_PROMPT = `You are an impartial judge for a Wikipedia Speedrun competition. Two AI agents race to navigate from a starting Wikipedia article to a target article by clicking links only.
+
+You will be given:
+- The task (start article → target article)
+- Each agent's final URL and click count
+
+Rules for judging:
+- If an agent's final URL matches the target article, they win
+- If both reached it, the one with fewer clicks wins
+- If neither reached it, judge who made better progress toward the target based on their final URL topic
+- Only declare a draw if both agents have clearly equivalent outcomes
+
+Respond with ONLY valid JSON:
 {
   "winner": "agent1" | "agent2" | "draw",
-  "reasoning": "<1-3 sentences explaining the decision>",
-  "confidence": "high" | "medium"
-}
-
-Rules:
-- Base your judgment primarily on the screenshot evidence.
-- If one agent's screenshot clearly shows better task completion, pick that agent.
-- If screenshots are inconclusive or unavailable, use click count and URL as secondary signals (fewer clicks for the same result is better).
-- Declare a draw only if both agents achieved equivalent outcomes.
-- Never pick a winner based solely on who claimed victory first.`
+  "reasoning": "<1-3 sentences explaining the decision>"
+}`
 
 export interface OracleInput {
   taskDescription: string
+  targetArticle: string
   agent1: {
     agentId: string
     name: string
     clickCount: number
     lastUrl: string | null
-    frameBase64: string | null
   }
   agent2: {
     agentId: string
     name: string
     clickCount: number
     lastUrl: string | null
-    frameBase64: string | null
   }
 }
 
@@ -38,69 +44,28 @@ export interface OracleVerdict {
   winner: 'agent1' | 'agent2' | 'draw'
   winnerId: string | null
   reasoning: string
-  confidence: 'high' | 'medium'
 }
 
-function buildUserContent(input: OracleInput): Anthropic.Messages.ContentBlockParam[] {
-  const blocks: Anthropic.Messages.ContentBlockParam[] = []
+function buildUserMessage(input: OracleInput): string {
+  return `Task: ${input.taskDescription}
+Target article: ${input.targetArticle}
 
-  blocks.push({
-    type: 'text',
-    text: `Task: ${input.taskDescription}\n\nAgent 1: ${input.agent1.name}\n- Clicks: ${input.agent1.clickCount}\n- Final URL: ${input.agent1.lastUrl ?? 'unknown'}\n- Final screenshot:`,
-  })
+Agent 1 (${input.agent1.name}):
+- Final URL: ${input.agent1.lastUrl ?? 'unknown'}
+- Clicks: ${input.agent1.clickCount}
 
-  if (input.agent1.frameBase64) {
-    blocks.push({
-      type: 'image',
-      source: { type: 'base64', media_type: 'image/jpeg', data: input.agent1.frameBase64 },
-    })
-  } else {
-    blocks.push({ type: 'text', text: '(no screenshot available)' })
-  }
+Agent 2 (${input.agent2.name}):
+- Final URL: ${input.agent2.lastUrl ?? 'unknown'}
+- Clicks: ${input.agent2.clickCount}
 
-  blocks.push({
-    type: 'text',
-    text: `\nAgent 2: ${input.agent2.name}\n- Clicks: ${input.agent2.clickCount}\n- Final URL: ${input.agent2.lastUrl ?? 'unknown'}\n- Final screenshot:`,
-  })
-
-  if (input.agent2.frameBase64) {
-    blocks.push({
-      type: 'image',
-      source: { type: 'base64', media_type: 'image/jpeg', data: input.agent2.frameBase64 },
-    })
-  } else {
-    blocks.push({ type: 'text', text: '(no screenshot available)' })
-  }
-
-  blocks.push({ type: 'text', text: '\nWho completed the task better?' })
-
-  return blocks
+Who won?`
 }
 
-export async function runOracle(input: OracleInput): Promise<OracleVerdict> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.error('[oracle] ANTHROPIC_API_KEY not set — defaulting to draw')
-    return {
-      winner: 'draw',
-      winnerId: null,
-      reasoning: 'Oracle unavailable (no API key). Match declared a draw.',
-      confidence: 'medium',
-    }
-  }
-
-  const client = new Anthropic({ apiKey })
-
+function parseVerdict(text: string, input: OracleInput): OracleVerdict {
   try {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 512,
-      system: ORACLE_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserContent(input) }],
-    })
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
-    const parsed = JSON.parse(text)
+    // Extract JSON from response (in case model wraps it in markdown)
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text)
 
     const winner: 'agent1' | 'agent2' | 'draw' =
       parsed.winner === 'agent1' ? 'agent1'
@@ -114,15 +79,69 @@ export async function runOracle(input: OracleInput): Promise<OracleVerdict> {
         : winner === 'agent2' ? input.agent2.agentId
         : null,
       reasoning: String(parsed.reasoning ?? 'No reasoning provided.'),
-      confidence: parsed.confidence === 'high' ? 'high' : 'medium',
     }
+  } catch {
+    console.error('[oracle] Failed to parse verdict:', text)
+    return {
+      winner: 'draw',
+      winnerId: null,
+      reasoning: 'Oracle returned an unparseable response. Match declared a draw.',
+    }
+  }
+}
+
+async function get0GClient() {
+  const privateKey = process.env.ZERO_GRAVITY_PRIVATE_KEY
+  if (!privateKey) throw new Error('ZERO_GRAVITY_PRIVATE_KEY not set')
+
+  const provider = new ethers.JsonRpcProvider(ZG_RPC)
+  const wallet = new ethers.Wallet(privateKey, provider)
+  const broker = await createZGComputeNetworkBroker(wallet)
+
+  const { endpoint, model } = await broker.inference.getServiceMetadata(ZG_PROVIDER_ADDRESS)
+  const headers = await broker.inference.getRequestHeaders(ZG_PROVIDER_ADDRESS, model)
+
+  const client = new OpenAI({
+    baseURL: endpoint,
+    apiKey: 'unused',
+    defaultHeaders: headers as unknown as Record<string, string>,
+  })
+
+  return { client, model }
+}
+
+export async function runOracle(input: OracleInput): Promise<OracleVerdict> {
+  if (!process.env.ZERO_GRAVITY_PRIVATE_KEY) {
+    console.error('[oracle] ZERO_GRAVITY_PRIVATE_KEY not set — declaring draw')
+    return {
+      winner: 'draw',
+      winnerId: null,
+      reasoning: 'Oracle unavailable (no 0G key configured). Match declared a draw.',
+    }
+  }
+
+  try {
+    console.log('[oracle] Connecting to 0G compute...')
+    const { client, model } = await get0GClient()
+
+    const response = await client.chat.completions.create({
+      model,
+      max_tokens: 512,
+      messages: [
+        { role: 'system', content: ORACLE_SYSTEM_PROMPT },
+        { role: 'user', content: buildUserMessage(input) },
+      ],
+    })
+
+    const text = response.choices[0]?.message?.content ?? ''
+    console.log('[oracle] 0G verdict raw:', text)
+    return parseVerdict(text, input)
   } catch (err) {
-    console.error('[oracle] Failed:', err)
+    console.error('[oracle] 0G compute failed:', err)
     return {
       winner: 'draw',
       winnerId: null,
       reasoning: 'Oracle failed to produce a verdict. Match declared a draw.',
-      confidence: 'medium',
     }
   }
 }

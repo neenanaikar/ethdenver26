@@ -12,28 +12,31 @@ interface AgentFrame {
   timestamp: number
 }
 
+interface OracleVerdict {
+  winner: string
+  reasoning: string
+}
+
 interface MatchData {
   match_id: string
-  name: string
   status: string
-  arena: { id: string; name: string; metric_name: string }
-  start_article: string
+  task_description: string
+  start_url: string
   target_article: string
   time_limit_seconds: number
   time_remaining_seconds: number | null
   prize_pool: number
+  oracle_verdict?: OracleVerdict | null
   agent1: {
     agent_id: string
     name: string
     click_count: number
-    path: string[]
     current_url: string | null
   } | null
   agent2: {
     agent_id: string
     name: string
     click_count: number
-    path: string[]
     current_url: string | null
   } | null
   winner: { agent_id: string; name: string } | null
@@ -48,14 +51,10 @@ interface ChatMessage {
   timestamp: number
 }
 
-interface MatchCompleteEvent {
-  matchId: string
-  winner: {
-    agent_id: string
-    name: string
-    click_count: number
-    path: string[]
-  }
+interface MatchCompleteData {
+  result: string
+  winner: { agent_id: string; name: string } | null
+  oracle_reasoning: string
   time_elapsed_seconds: number
   prize_pool: number
 }
@@ -92,12 +91,6 @@ function Timer({ endsAt }: { endsAt: string | null }) {
   )
 }
 
-function truncatePath(path: string[], maxItems = 3): string {
-  if (path.length === 0) return '...'
-  if (path.length <= maxItems) return path.join(' → ')
-  return '... → ' + path.slice(-maxItems).join(' → ')
-}
-
 function StreamPanel({
   agent,
   frame,
@@ -122,7 +115,9 @@ function StreamPanel({
 
   const currentArticle = frame?.currentUrl
     ? decodeURIComponent(frame.currentUrl.split('/wiki/')[1] || '').replace(/_/g, ' ')
-    : agent.path[agent.path.length - 1] || '...'
+    : agent.current_url
+    ? decodeURIComponent(agent.current_url.split('/wiki/')[1] || '').replace(/_/g, ' ')
+    : '...'
 
   return (
     <div className={`flex-1 bg-[#0e0e10] relative ${isWinner ? 'ring-2 ring-[#9147ff]' : ''}`}>
@@ -176,19 +171,18 @@ export default function MatchPage() {
   const [match, setMatch] = useState<MatchData | null>(null)
   const [frames, setFrames] = useState<Record<string, AgentFrame>>({})
   const [error, setError] = useState<string | null>(null)
-  const [winner, setWinner] = useState<MatchCompleteEvent['winner'] | null>(null)
+  const [winnerData, setWinnerData] = useState<{ name: string; agent_id: string } | null>(null)
+  const [oracleReasoning, setOracleReasoning] = useState<string | null>(null)
+  const [judging, setJudging] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [copiedSkill, setCopiedSkill] = useState(false)
-  const [copiedEnter, setCopiedEnter] = useState(false)
   const socketRef = useRef<Socket | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Simulated viewer count
   const viewerCount = match?.status === 'active' ? Math.floor(Math.random() * 50) + 10 : 0
 
-  // Stable fetch function
   const fetchMatch = useCallback(async () => {
     try {
       const res = await fetch(`/api/matches/${matchId}`)
@@ -196,24 +190,24 @@ export default function MatchPage() {
       const data = await res.json()
       setMatch(data)
       if (data.winner) {
-        setWinner({
-          agent_id: data.winner.agent_id,
-          name: data.winner.name,
-          click_count: 0,
-          path: [],
-        })
+        setWinnerData({ agent_id: data.winner.agent_id, name: data.winner.name })
+      }
+      if (data.status === 'judging') {
+        setJudging(true)
+      }
+      // Read oracle reasoning from stored verdict (already parsed by API)
+      if (data.oracle_verdict?.reasoning) {
+        setOracleReasoning(data.oracle_verdict.reasoning)
       }
     } catch (err) {
       setError((err as Error).message)
     }
   }, [matchId])
 
-  // Fetch initial match data
   useEffect(() => {
     fetchMatch()
   }, [fetchMatch])
 
-  // Poll while waiting for opponent (every 3s) — single interval via ref
   useEffect(() => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
@@ -229,7 +223,6 @@ export default function MatchPage() {
     }
   }, [match?.status, fetchMatch])
 
-  // Socket.io connection
   useEffect(() => {
     const socket = io()
     socketRef.current = socket
@@ -238,13 +231,16 @@ export default function MatchPage() {
       socket.emit('join_match', matchId)
     })
 
-    // When second agent joins and match becomes active, re-fetch full match data
     socket.on('match_start', async () => {
       const res = await fetch(`/api/matches/${matchId}`)
       if (res.ok) {
         const data = await res.json()
         setMatch(data)
       }
+    })
+
+    socket.on('judging_started', () => {
+      setJudging(true)
     })
 
     socket.on('frame', (data: AgentFrame & { matchId: string }) => {
@@ -260,25 +256,17 @@ export default function MatchPage() {
           const isAgent2 = prev.agent2?.agent_id === data.agentId
 
           if (isAgent1 && prev.agent1) {
-            const article = data.currentUrl?.split('/wiki/')[1]?.replace(/_/g, ' ')
-            const newPath = article && !prev.agent1.path.includes(article)
-              ? [...prev.agent1.path, decodeURIComponent(article)]
-              : prev.agent1.path
             return {
               ...prev,
               status: 'active',
-              agent1: { ...prev.agent1, click_count: data.clickCount, path: newPath },
+              agent1: { ...prev.agent1, click_count: data.clickCount, current_url: data.currentUrl },
             }
           }
           if (isAgent2 && prev.agent2) {
-            const article = data.currentUrl?.split('/wiki/')[1]?.replace(/_/g, ' ')
-            const newPath = article && !prev.agent2.path.includes(article)
-              ? [...prev.agent2.path, decodeURIComponent(article)]
-              : prev.agent2.path
             return {
               ...prev,
               status: 'active',
-              agent2: { ...prev.agent2, click_count: data.clickCount, path: newPath },
+              agent2: { ...prev.agent2, click_count: data.clickCount, current_url: data.currentUrl },
             }
           }
           return prev
@@ -286,9 +274,11 @@ export default function MatchPage() {
       }
     })
 
-    socket.on('match_complete', (data: MatchCompleteEvent) => {
+    socket.on('match_complete', (data: MatchCompleteData & { matchId: string }) => {
       if (data.matchId === matchId) {
-        setWinner(data.winner)
+        setJudging(false)
+        setWinnerData(data.winner ?? null)
+        setOracleReasoning(data.oracle_reasoning ?? null)
         setMatch(prev => prev ? { ...prev, status: 'complete' } : prev)
       }
     })
@@ -299,7 +289,6 @@ export default function MatchPage() {
     }
   }, [matchId])
 
-  // Auto-scroll chat
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight
@@ -339,8 +328,6 @@ export default function MatchPage() {
     )
   }
 
-  const agent1Path = match.agent1?.path || []
-  const agent2Path = match.agent2?.path || []
   const isWaiting = match.status === 'waiting_for_opponent'
   const isComplete = match.status === 'complete'
   const bothReady = !!(
@@ -348,41 +335,57 @@ export default function MatchPage() {
     frames[match.agent1.agent_id] && frames[match.agent2.agent_id]
   )
 
-  // After 30s active with no frames, stop blocking the UI
   const matchActiveForMs = match.started_at ? Date.now() - new Date(match.started_at).getTime() : 0
   const showConnectingOverlay = match.status === 'active' && !bothReady && matchActiveForMs < 30_000
 
-  // Get the origin URL for skill and join commands
   const apiBase = typeof window !== 'undefined' ? window.location.origin : ''
   const skillUrl = `${apiBase}/skill.md`
-  const enterCmd = `curl -X POST ${apiBase}/api/matches/${matchId}/enter \\\n  -H "Authorization: Bearer YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"agent_id":"YOUR_AGENT_ID"}'`
 
   const copySkill = async () => {
     await navigator.clipboard.writeText(`Read ${skillUrl} and follow the instructions to compete`)
     setCopiedSkill(true)
     setTimeout(() => setCopiedSkill(false), 2000)
   }
-  const copyEnter = async () => {
-    await navigator.clipboard.writeText(enterCmd)
-    setCopiedEnter(true)
-    setTimeout(() => setCopiedEnter(false), 2000)
-  }
+
+  // Extract readable start article name
+  const startName = match.start_url
+    ? decodeURIComponent(match.start_url.split('/wiki/')[1] || '').replace(/_/g, ' ')
+    : '...'
 
   return (
     <div className="h-full flex">
       {/* LEFT: Streams side by side */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Streams row */}
         <div className="flex-1 flex min-h-0 relative">
 
           {/* Match complete overlay */}
           {isComplete && (
-            <div className="absolute inset-0 bg-black/80 z-20 flex flex-col items-center justify-center gap-3">
+            <div className="absolute inset-0 bg-black/85 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center">
               <div className="text-[40px]">🏆</div>
-              <div className="text-[#9147ff] text-[20px] font-bold">{winner?.name ?? match.winner?.name} wins!</div>
-              <div className="text-[#adadb8] text-[13px]">{(winner?.click_count ?? match.winner?.agent_id) ? `${winner?.click_count ?? ''} clicks` : ''}</div>
-              <div className="text-[#848494] text-[11px] mt-1">Match complete</div>
-              <a href="/" className="mt-4 text-[11px] text-[#9147ff] hover:underline">← Watch more matches</a>
+              {winnerData ? (
+                <>
+                  <div className="text-[#9147ff] text-[20px] font-bold">{winnerData.name} wins!</div>
+                  <div className="text-[#848494] text-[11px]">Match complete</div>
+                </>
+              ) : (
+                <div className="text-[#adadb8] text-[18px] font-bold">Draw!</div>
+              )}
+              {oracleReasoning && (
+                <div className="max-w-sm bg-[#18181b] border border-[#2d2d32] p-3 text-[11px] text-[#adadb8] text-left mt-1">
+                  <div className="text-[10px] text-[#848494] uppercase tracking-wide mb-1">0G Oracle verdict</div>
+                  {oracleReasoning}
+                </div>
+              )}
+              <a href="/" className="mt-3 text-[11px] text-[#9147ff] hover:underline">← Watch more matches</a>
+            </div>
+          )}
+
+          {/* Judging overlay */}
+          {judging && !isComplete && (
+            <div className="absolute inset-0 bg-black/80 z-20 flex flex-col items-center justify-center gap-4">
+              <div className="w-10 h-10 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin" />
+              <div className="text-[#efeff1] text-[15px] font-semibold">0G Oracle is judging...</div>
+              <div className="text-[#848494] text-[11px]">Analyzing agent performance on-chain</div>
             </div>
           )}
 
@@ -414,7 +417,7 @@ export default function MatchPage() {
           <StreamPanel
             agent={match.agent1}
             frame={match.agent1 ? frames[match.agent1.agent_id] : null}
-            isWinner={winner?.agent_id === match.agent1?.agent_id}
+            isWinner={winnerData?.agent_id === match.agent1?.agent_id}
             matchStatus={match.status}
           />
 
@@ -425,22 +428,9 @@ export default function MatchPage() {
           <StreamPanel
             agent={match.agent2}
             frame={match.agent2 ? frames[match.agent2.agent_id] : null}
-            isWinner={winner?.agent_id === match.agent2?.agent_id}
+            isWinner={winnerData?.agent_id === match.agent2?.agent_id}
             matchStatus={match.status}
           />
-        </div>
-
-        {/* Path bar at bottom */}
-        <div className="bg-[#18181b] border-t border-[#2d2d32] px-3 py-1.5 text-[11px] flex items-center gap-4">
-          <div className="flex-1 truncate">
-            <span className="text-[#adadb8]">{match.agent1?.name || 'Agent 1'}:</span>{' '}
-            <span className="text-[#848494]">{truncatePath(agent1Path)}</span>
-          </div>
-          <div className="text-[#2d2d32]">|</div>
-          <div className="flex-1 truncate text-right">
-            <span className="text-[#adadb8]">{match.agent2?.name || 'Agent 2'}:</span>{' '}
-            <span className="text-[#848494]">{truncatePath(agent2Path)}</span>
-          </div>
         </div>
       </div>
 
@@ -451,6 +441,11 @@ export default function MatchPage() {
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[12px] text-[#efeff1] font-medium">Wikipedia Speedrun</span>
             {match.status === 'active' && <span className="live-badge">LIVE</span>}
+            {judging && !isComplete && (
+              <span className="text-[10px] text-[#9147ff] border border-[#9147ff]/40 px-1.5 py-0.5 animate-pulse">
+                JUDGING
+              </span>
+            )}
             {isWaiting && (
               <span className="text-[10px] text-[#ff9500] border border-[#ff9500]/40 px-1.5 py-0.5">
                 WAITING
@@ -465,15 +460,9 @@ export default function MatchPage() {
                 ? <span className="text-[#848494] text-[12px]">Complete</span>
                 : <Timer endsAt={match.ends_at} />}
             </div>
-            <div className="flex justify-between">
-              <span className="text-[#848494]">Target</span>
-              <span className="text-[#efeff1]">{match.target_article}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#848494]">Start</span>
-              <span className="text-[#efeff1] truncate max-w-[160px] text-right">
-                {match.start_article?.split('/wiki/')[1]?.replace(/_/g, ' ') || '...'}
-              </span>
+            <div className="flex justify-between gap-2">
+              <span className="text-[#848494] shrink-0">Race</span>
+              <span className="text-[#efeff1] text-right truncate">{startName} → {match.target_article}</span>
             </div>
             {!isWaiting && (
               <div className="flex justify-between">
@@ -488,46 +477,32 @@ export default function MatchPage() {
           </div>
 
           {/* Winner banner */}
-          {winner && (
+          {(winnerData || isComplete) && (
             <div className="mt-3 bg-[#9147ff]/10 border border-[#9147ff]/30 p-2 text-center">
               <div className="text-[#9147ff] text-[12px] font-medium">
-                {winner.name} wins!
+                {winnerData ? `🏆 ${winnerData.name} wins!` : '🤝 Draw'}
               </div>
-              <div className="text-[#848494] text-[11px]">
-                {winner.click_count} clicks
-              </div>
+              {oracleReasoning && (
+                <div className="text-[10px] text-[#848494] mt-1 text-left">
+                  {oracleReasoning}
+                </div>
+              )}
             </div>
           )}
 
           {/* Join instructions when waiting */}
           {isWaiting && (
-            <div className="mt-3 bg-[#0e0e10] border border-[#2d2d32] p-2.5 space-y-3">
-              {/* Skill URL — Moltbook style */}
-              <div>
-                <div className="text-[11px] text-[#adadb8] font-medium mb-1">Send your agent to compete:</div>
-                <div className="flex items-center gap-2 bg-black/60 rounded px-2 py-1.5">
-                  <span className="font-mono text-[10px] text-[#9147ff] flex-1 break-all select-all">
-                    {`Read ${skillUrl} and follow the instructions to compete`}
-                  </span>
-                  <button onClick={copySkill} className="text-[#848494] hover:text-[#efeff1] text-[10px] shrink-0 ml-1">
-                    {copiedSkill ? '✓' : 'Copy'}
-                  </button>
-                </div>
-                <div className="text-[10px] text-[#848494] mt-1">Works with OpenClaw · Moltbook · Claude · any browser agent</div>
+            <div className="mt-3 bg-[#0e0e10] border border-[#2d2d32] p-2.5">
+              <div className="text-[11px] text-[#adadb8] font-medium mb-1">Send your agent to compete:</div>
+              <div className="flex items-center gap-2 bg-black/60 rounded px-2 py-1.5">
+                <span className="font-mono text-[10px] text-[#9147ff] flex-1 break-all select-all">
+                  {`Read ${skillUrl} and follow the instructions to compete`}
+                </span>
+                <button onClick={copySkill} className="text-[#848494] hover:text-[#efeff1] text-[10px] shrink-0 ml-1">
+                  {copiedSkill ? '✓' : 'Copy'}
+                </button>
               </div>
-
-              {/* Direct enter curl for already-registered agents */}
-              <div>
-                <div className="text-[11px] text-[#adadb8] font-medium mb-1">Or enter this match directly:</div>
-                <div className="flex items-start gap-2 bg-black/60 rounded px-2 py-1.5">
-                  <span className="font-mono text-[10px] text-[#9147ff] flex-1 break-all select-all whitespace-pre-wrap">
-                    {enterCmd}
-                  </span>
-                  <button onClick={copyEnter} className="text-[#848494] hover:text-[#efeff1] text-[10px] shrink-0 ml-1 mt-0.5">
-                    {copiedEnter ? '✓' : 'Copy'}
-                  </button>
-                </div>
-              </div>
+              <div className="text-[10px] text-[#848494] mt-1">Works with OpenClaw · Moltbook · Claude · any browser agent</div>
             </div>
           )}
         </div>
@@ -564,7 +539,6 @@ export default function MatchPage() {
             />
           </form>
 
-          {/* Tip buttons */}
           {!isWaiting && !isComplete && (
             <div className="flex gap-2 mt-2">
               <button className="btn-accent flex-1">

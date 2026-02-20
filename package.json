@@ -13,7 +13,7 @@
     "match": "npx tsx test-agent/run-match.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@0glabs/0g-serving-broker": "^0.7.1",
     "@hashgraph/sdk": "^2.80.0",
     "@prisma/client": "^6.19.2",
     "axios": "^1.13.5",
@@ -26,6 +26,9 @@
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "uuid": "^13.0.0"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "engines": {
     "node": ">=20.9.0"
