@@ -2,7 +2,7 @@ import { createZGComputeNetworkBroker } from '@0glabs/0g-serving-broker'
 import { ethers } from 'ethers'
 import OpenAI from 'openai'
 
-const ZG_PROVIDER_ADDRESS = '0xf07240Efa67755B5311bc75784a061eDB47165Dd'
+const ZG_PROVIDER_ADDRESS = '0xa48f01287233509FD694a22Bf840225062E67836' // Galileo: qwen/qwen-2.5-7b-instruct
 const ZG_RPC = 'https://evmrpc-testnet.0g.ai'
 
 const ORACLE_SYSTEM_PROMPT = `You are an impartial judge for a Wikipedia Speedrun competition. Two AI agents race to navigate from a starting Wikipedia article to a target article by clicking links only.
