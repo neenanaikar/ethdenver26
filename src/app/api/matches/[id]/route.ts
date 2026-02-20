@@ -88,8 +88,6 @@ export async function GET(
     target_article: match.targetArticle,
     time_limit_seconds: match.timeLimitSeconds,
     time_remaining_seconds: timeRemaining,
-    entry_fee: match.entryFee,
-    prize_pool: match.prizePool,
 
     agent1: match.agent1 ? {
       agent_id: match.agent1.id,

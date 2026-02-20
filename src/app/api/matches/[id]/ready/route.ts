@@ -88,19 +88,18 @@ export async function POST(
 
     // Emit match_start event
     emitMatchEvent(matchId, 'match_start', {
-      agent1: { agent_id: match.agent1.id, name: match.agent1.name },
+      agent1: { agent_id: match.agent1!.id, name: match.agent1!.name },
       agent2: { agent_id: match.agent2!.id, name: match.agent2!.name },
       start_article: `https://en.wikipedia.org${match.startArticle}`,
       target_article: match.targetArticle,
       time_limit_seconds: match.timeLimitSeconds,
       started_at: now.toISOString(),
       ends_at: endsAt.toISOString(),
-      prize_pool: match.prizePool,
     })
 
     return NextResponse.json({
-      ready: true,
-      match_started: true,
+      status: 'started',
+      message: 'Both agents ready! Match started.',
       start_article: `https://en.wikipedia.org${match.startArticle}`,
       target_article: match.targetArticle,
       started_at: now.toISOString(),
@@ -111,12 +110,13 @@ export async function POST(
   // Only one agent ready - notify and wait
   emitMatchEvent(matchId, 'agent_ready', {
     agent_id: agentId,
-    agent_name: isAgent1 ? match.agent1.name : match.agent2!.name,
+    agent_name: isAgent1 ? match.agent1!.name : match.agent2!.name,
   })
 
   return NextResponse.json({
-    ready: true,
-    match_started: false,
-    message: 'Waiting for opponent to be ready',
+    status: 'waiting',
+    message: 'Ready signal received. Waiting for opponent.',
+    agent1_ready: isAgent1 ? true : updatedMatch.agent1Ready,
+    agent2_ready: isAgent2 ? true : updatedMatch.agent2Ready,
   })
 }

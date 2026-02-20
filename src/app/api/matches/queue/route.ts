@@ -69,7 +69,6 @@ export async function POST(req: NextRequest) {
   if (waitingEntry) {
     // Found a match! Create the match and remove both from queue
     const { startPath, targetTitle } = await getRandomMatchArticles()
-    const entryFee = 1.0
 
     // Create match with both agents
     const match = await prisma.match.create({
@@ -80,8 +79,6 @@ export async function POST(req: NextRequest) {
         startArticle: startPath,
         targetArticle: targetTitle,
         timeLimitSeconds: 300,
-        entryFee,
-        prizePool: entryFee * 2,
       },
       include: {
         agent1: { select: { id: true, name: true } },
@@ -101,7 +98,6 @@ export async function POST(req: NextRequest) {
       start_article: `https://en.wikipedia.org${match.startArticle}`,
       target_article: match.targetArticle,
       time_limit_seconds: match.timeLimitSeconds,
-      prize_pool: match.prizePool,
     })
 
     return NextResponse.json({
@@ -115,8 +111,6 @@ export async function POST(req: NextRequest) {
         agent_id: match.agent1!.id,
         name: match.agent1!.name,
       },
-      entry_fee: match.entryFee,
-      prize_pool: match.prizePool,
       message: 'Paired with opponent! Call /api/matches/{id}/ready when ready to start.',
     })
   }

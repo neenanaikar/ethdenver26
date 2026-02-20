@@ -3,6 +3,50 @@ import { prisma } from '@/lib/db'
 import { getApiKey, getAgentFromApiKey } from '@/lib/auth'
 import { extractArticleTitle } from '@/lib/wikipedia'
 import { getFrame, clearMatchFrames, emitMatchEvent } from '@/lib/frames'
+import { getContract, INFT_CONTRACT_ADDRESS } from '@/lib/contract'
+
+// Simple Elo calculation
+function calculateNewElo(winnerElo: number, loserElo: number): { winnerNew: number; loserNew: number } {
+  const K = 32 // K-factor
+  const expectedWinner = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400))
+  const expectedLoser = 1 / (1 + Math.pow(10, (winnerElo - loserElo) / 400))
+
+  const winnerNew = Math.round(winnerElo + K * (1 - expectedWinner))
+  const loserNew = Math.round(loserElo + K * (0 - expectedLoser))
+
+  return { winnerNew, loserNew: Math.max(loserNew, 100) } // Min Elo of 100
+}
+
+// Update agent stats on-chain (non-blocking)
+async function updateOnChainStats(agent: {
+  inftTokenId: string | null
+  wins: number
+  losses: number
+  draws: number
+  bestClickCount: number | null
+  eloRating: number
+}) {
+  if (!INFT_CONTRACT_ADDRESS || !agent.inftTokenId) {
+    return
+  }
+
+  try {
+    const contract = getContract()
+    const tx = await contract.updateStats(
+      BigInt(agent.inftTokenId),
+      BigInt(agent.wins),
+      BigInt(agent.losses),
+      BigInt(agent.draws),
+      BigInt(agent.bestClickCount || 0),
+      BigInt(agent.eloRating)
+    )
+    await tx.wait()
+    console.log(`[Victory] Updated on-chain stats for iNFT #${agent.inftTokenId}`)
+  } catch (error) {
+    console.error(`[Victory] Failed to update on-chain stats:`, error)
+    // Non-blocking - continue even if on-chain update fails
+  }
+}
 
 // POST /api/matches/[id]/claim-victory - Claim victory
 export async function POST(
@@ -101,6 +145,13 @@ export async function POST(
     ? Math.floor((now.getTime() - match.startedAt.getTime()) / 1000)
     : 0
 
+  // Calculate new Elo ratings
+  const winner = isAgent1 ? match.agent1 : match.agent2
+  const loser = isAgent1 ? match.agent2 : match.agent1
+  const winnerOldElo = winner?.eloRating || 1200
+  const loserOldElo = loser?.eloRating || 1200
+  const { winnerNew, loserNew } = calculateNewElo(winnerOldElo, loserOldElo)
+
   // Update match status
   await prisma.match.update({
     where: { id: matchId },
@@ -112,11 +163,11 @@ export async function POST(
   })
 
   // Update winner stats
-  await prisma.agent.update({
+  const updatedWinner = await prisma.agent.update({
     where: { id: agent_id },
     data: {
       wins: { increment: 1 },
-      totalEarnings: { increment: match.prizePool },
+      eloRating: winnerNew,
       bestClickCount: agent.bestClickCount === null || clickCount < agent.bestClickCount
         ? clickCount
         : agent.bestClickCount,
@@ -125,13 +176,21 @@ export async function POST(
 
   // Update loser stats
   const loserId = isAgent1 ? match.agent2Id : match.agent1Id
+  let updatedLoser = null
   if (loserId) {
-    await prisma.agent.update({
+    updatedLoser = await prisma.agent.update({
       where: { id: loserId },
       data: {
         losses: { increment: 1 },
+        eloRating: loserNew,
       },
     })
+  }
+
+  // Update on-chain stats (non-blocking)
+  updateOnChainStats(updatedWinner)
+  if (updatedLoser) {
+    updateOnChainStats(updatedLoser)
   }
 
   // Emit match complete event to spectators
@@ -141,9 +200,9 @@ export async function POST(
       name: agent.name,
       click_count: clickCount,
       path: agentPath,
+      new_elo: winnerNew,
     },
     time_elapsed_seconds: timeElapsed,
-    prize_pool: match.prizePool,
   })
 
   // Clear frames from memory
@@ -151,11 +210,15 @@ export async function POST(
 
   return NextResponse.json({
     result: 'victory',
+    winner: {
+      agent_id: agent_id,
+      name: agent.name,
+    },
     verified_article: articleTitle,
     click_count: clickCount,
     path: agentPath,
     time_elapsed_seconds: timeElapsed,
-    prize_won: match.prizePool,
-    message: `Congratulations! You reached ${match.targetArticle} in ${clickCount} clicks.`,
+    new_elo: winnerNew,
+    message: `Victory! You reached ${match.targetArticle} in ${clickCount} clicks.`,
   })
 }

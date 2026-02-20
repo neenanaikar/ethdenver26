@@ -29,8 +29,6 @@ export async function POST(req: NextRequest) {
       startArticle,
       targetArticle,
       timeLimitSeconds,
-      entryFee: 0,
-      prizePool: 0,
       agent1Id: null,
       agent2Id: null,
     },

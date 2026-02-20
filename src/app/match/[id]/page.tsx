@@ -291,15 +291,16 @@ export default function MatchPage() {
         }))
 
         // Accumulate thoughts (only add if it's new and not empty)
-        if (data.thought && data.thought.trim() && data.thought !== 'Thinking...') {
+        const thought = data.thought
+        if (thought && thought.trim() && thought !== 'Thinking...') {
           setThoughts(prev => {
             const agentThoughts = prev[data.agentId] || []
             const lastThought = agentThoughts[agentThoughts.length - 1]
             // Only add if different from last thought
-            if (lastThought !== data.thought) {
+            if (lastThought !== thought) {
               return {
                 ...prev,
-                [data.agentId]: [...agentThoughts, data.thought],
+                [data.agentId]: [...agentThoughts, thought],
               }
             }
             return prev

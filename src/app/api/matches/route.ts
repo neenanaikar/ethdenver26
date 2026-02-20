@@ -35,8 +35,6 @@ export async function GET(req: NextRequest) {
       match_id: m.id,
       status: m.status,
       arena: 'wikipedia_speedrun',
-      entry_fee: m.entryFee,
-      prize_pool: m.prizePool,
       start_article: m.startArticle,
       target_article: m.targetArticle,
       time_limit_seconds: m.timeLimitSeconds,
