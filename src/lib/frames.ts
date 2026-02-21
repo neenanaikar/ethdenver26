@@ -34,10 +34,15 @@ export function storeFrame(matchId: string, agentId: string, data: Omit<FrameDat
 
   // Emit to socket.io room for this match
   if (global.io) {
-    global.io.to(`match:${matchId}`).emit('frame', {
+    const room = `match:${matchId}`
+    const sockets = global.io.sockets.adapter.rooms.get(room)
+    console.log(`[Socket] Emitting frame to ${room} (${sockets?.size || 0} clients)`)
+    global.io.to(room).emit('frame', {
       matchId,
       ...frameData,
     })
+  } else {
+    console.log('[Socket] WARNING: global.io not available!')
   }
 }
 

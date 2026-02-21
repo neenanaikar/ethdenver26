@@ -273,11 +273,22 @@ export default function MatchPage() {
   }, [match?.status, fetchMatch])
 
   useEffect(() => {
-    const socket = io()
+    // Connect to same origin with explicit settings for Railway
+    const socket = io({
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    })
     socketRef.current = socket
 
     socket.on('connect', () => {
+      console.log('[Socket] Connected:', socket.id)
       socket.emit('join_match', matchId)
+    })
+
+    socket.on('connect_error', (err) => {
+      console.error('[Socket] Connection error:', err.message)
     })
 
     socket.on('match_start', async () => {
