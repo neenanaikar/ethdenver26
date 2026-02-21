@@ -213,6 +213,16 @@ function StreamPanel({
   )
 }
 
+// Generate a fun unique username
+function generateUsername(): string {
+  const adjectives = ['Swift', 'Cosmic', 'Neon', 'Quantum', 'Stellar', 'Cyber', 'Pixel', 'Turbo', 'Hyper', 'Ultra', 'Mega', 'Epic', 'Rad', 'Zen', 'Dope']
+  const nouns = ['Panda', 'Wolf', 'Fox', 'Hawk', 'Tiger', 'Dragon', 'Phoenix', 'Ninja', 'Wizard', 'Raven', 'Falcon', 'Lynx', 'Viper', 'Ghost', 'Spark']
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)]
+  const noun = nouns[Math.floor(Math.random() * nouns.length)]
+  const num = Math.floor(Math.random() * 100)
+  return `${adj}${noun}${num}`
+}
+
 export default function MatchPage() {
   const params = useParams()
   const matchId = params.id as string
@@ -229,10 +239,23 @@ export default function MatchPage() {
   const [copiedSkill, setCopiedSkill] = useState(false)
   const [viewerCount, setViewerCount] = useState(0)
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [username, setUsername] = useState<string>('')
   const socketRef = useRef<Socket | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const seenMessageIdsRef = useRef<Set<string>>(new Set())
+
+  // Generate or retrieve username from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('arena_chat_username')
+    if (stored) {
+      setUsername(stored)
+    } else {
+      const newUsername = generateUsername()
+      localStorage.setItem('arena_chat_username', newUsername)
+      setUsername(newUsername)
+    }
+  }, [])
 
   // Set viewer count on client only to avoid hydration mismatch
   useEffect(() => {
@@ -605,7 +628,7 @@ export default function MatchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user: 'Viewer',
+          user: username || 'Viewer',
           message: text,
         }),
       })
@@ -833,18 +856,26 @@ export default function MatchPage() {
             </div>
           ) : (
             <div className="space-y-0.5">
-              {messages.map(msg => (
-                <div key={msg.id} className="text-[12px]">
-                  <span className="text-[#adadb8]">{msg.user}:</span>{' '}
-                  <span className="text-[#efeff1]">{msg.message}</span>
-                </div>
-              ))}
+              {messages.map(msg => {
+                const isOwnMessage = msg.user === username
+                return (
+                  <div key={msg.id} className="text-[12px]">
+                    <span className={isOwnMessage ? 'text-[#9147ff]' : 'text-[#adadb8]'}>{msg.user}:</span>{' '}
+                    <span className="text-[#efeff1]">{msg.message}</span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
 
         {/* Chat input */}
         <div className="p-3 border-t border-[#2d2d32]">
+          {username && (
+            <div className="text-[10px] text-[#848494] mb-1.5">
+              Chatting as <span className="text-[#9147ff]">{username}</span>
+            </div>
+          )}
           <form onSubmit={handleSendMessage}>
             <input
               type="text"
