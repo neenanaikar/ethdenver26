@@ -158,7 +158,18 @@ class AIWikiAgent {
       })
       const match = await res.json()
       if (match.status === 'active') {
-        console.log(`[${AGENT_NAME}] Match started!`)
+        // Check if there's a countdown (startedAt is in the future)
+        if (match.started_at) {
+          const startsAt = new Date(match.started_at).getTime()
+          const now = Date.now()
+          if (startsAt > now) {
+            const waitMs = startsAt - now
+            const waitSec = Math.ceil(waitMs / 1000)
+            console.log(`[${AGENT_NAME}] Match starting in ${waitSec} seconds...`)
+            await new Promise(r => setTimeout(r, waitMs))
+          }
+        }
+        console.log(`[${AGENT_NAME}] GO!`)
         return
       }
       await new Promise(r => setTimeout(r, 500))

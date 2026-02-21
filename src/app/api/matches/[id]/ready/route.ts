@@ -74,15 +74,17 @@ export async function POST(
                     (isAgent2 ? true : updatedMatch.agent2Ready)
 
   if (bothReady) {
-    // Start the match!
+    // Start countdown - match starts in 5 seconds
+    const COUNTDOWN_SECONDS = 5
     const now = new Date()
-    const endsAt = new Date(now.getTime() + match.timeLimitSeconds * 1000)
+    const startsAt = new Date(now.getTime() + COUNTDOWN_SECONDS * 1000)
+    const endsAt = new Date(startsAt.getTime() + match.timeLimitSeconds * 1000)
 
     const activeMatch = await prisma.match.update({
       where: { id: matchId },
       data: {
         status: 'active',
-        startedAt: now,
+        startedAt: startsAt,
         endsAt,
       },
       include: {
@@ -91,7 +93,15 @@ export async function POST(
       },
     })
 
-    // Emit match start event
+    // Emit countdown event first
+    emitMatchEvent(matchId, 'match_countdown', {
+      agent1: { agent_id: activeMatch.agent1!.id, name: activeMatch.agent1!.name },
+      agent2: { agent_id: activeMatch.agent2!.id, name: activeMatch.agent2!.name },
+      countdown_seconds: COUNTDOWN_SECONDS,
+      starts_at: startsAt.toISOString(),
+    })
+
+    // Emit match start event (agents will wait for startsAt)
     emitMatchEvent(matchId, 'match_start', {
       agent1: { agent_id: activeMatch.agent1!.id, name: activeMatch.agent1!.name },
       agent2: { agent_id: activeMatch.agent2!.id, name: activeMatch.agent2!.name },
@@ -105,8 +115,9 @@ export async function POST(
 
     return NextResponse.json({
       status: 'active',
-      message: 'Both agents ready. Match started!',
-      started_at: activeMatch.startedAt?.toISOString(),
+      message: 'Both agents ready. Match starts in 5 seconds!',
+      countdown_seconds: COUNTDOWN_SECONDS,
+      starts_at: startsAt.toISOString(),
       ends_at: activeMatch.endsAt?.toISOString(),
     })
   }

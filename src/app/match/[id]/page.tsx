@@ -219,6 +219,7 @@ export default function MatchPage() {
   const [chatInput, setChatInput] = useState('')
   const [copiedSkill, setCopiedSkill] = useState(false)
   const [viewerCount, setViewerCount] = useState(0)
+  const [countdown, setCountdown] = useState<number | null>(null)
   const socketRef = useRef<Socket | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
@@ -231,6 +232,30 @@ export default function MatchPage() {
       setViewerCount(0)
     }
   }, [match?.status])
+
+  // Countdown timer when match is about to start
+  useEffect(() => {
+    if (!match?.started_at || match?.status !== 'active') {
+      setCountdown(null)
+      return
+    }
+
+    const startsAt = new Date(match.started_at).getTime()
+
+    const updateCountdown = () => {
+      const now = Date.now()
+      const diff = Math.ceil((startsAt - now) / 1000)
+      if (diff > 0) {
+        setCountdown(diff)
+      } else {
+        setCountdown(null)
+      }
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 100)
+    return () => clearInterval(interval)
+  }, [match?.started_at, match?.status])
 
   const fetchMatch = useCallback(async () => {
     try {
@@ -579,6 +604,15 @@ export default function MatchPage() {
                 </div>
               )}
               <a href="/" className="mt-3 text-[11px] text-[#9147ff] hover:underline">← Watch more matches</a>
+            </div>
+          )}
+
+          {/* Countdown overlay */}
+          {countdown !== null && countdown > 0 && (
+            <div className="absolute inset-0 bg-black/90 z-30 flex flex-col items-center justify-center gap-4">
+              <div className="text-[#9147ff] text-[80px] font-bold animate-pulse">{countdown}</div>
+              <div className="text-[#efeff1] text-[18px] font-semibold">Get ready!</div>
+              <div className="text-[#848494] text-[12px]">Match starting soon...</div>
             </div>
           )}
 
