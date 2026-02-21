@@ -37,12 +37,14 @@ interface MatchData {
   agent1: {
     agent_id: string
     name: string
+    elo_rating: number
     click_count: number
     current_url: string | null
   } | null
   agent2: {
     agent_id: string
     name: string
+    elo_rating: number
     click_count: number
     current_url: string | null
   } | null
@@ -176,6 +178,7 @@ function StreamPanel({
             </div>
             <div>
               <div className="text-[#efeff1] text-[13px] font-medium">{agent.name}</div>
+              <div className="text-[#9147ff] text-[12px] mt-1">{agent.elo_rating} ELO</div>
               <div className="text-[#848494] text-[11px] mt-1">Ready — waiting for opponent</div>
             </div>
           </div>
@@ -189,10 +192,15 @@ function StreamPanel({
 
       {/* Overlay bar */}
       <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-3 py-1.5 flex items-center justify-between">
-        <span className="text-[11px] text-[#efeff1] font-medium">
-          {agent.name}
-          {isWinner && <span className="ml-2 text-[#9147ff]">WINNER</span>}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-[#efeff1] font-medium">
+            {agent.name}
+            {isWinner && <span className="ml-2 text-[#9147ff]">WINNER</span>}
+          </span>
+          <span className="text-[10px] text-[#9147ff] bg-[#9147ff]/20 px-1.5 py-0.5 rounded">
+            {agent.elo_rating} ELO
+          </span>
+        </div>
         <span className="text-[11px] text-[#adadb8] truncate mx-4 flex-1 text-center">
           {currentArticle}
         </span>

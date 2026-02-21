@@ -12,8 +12,8 @@ export async function GET(
   const match = await prisma.match.findUnique({
     where: { id: matchId },
     include: {
-      agent1: { select: { id: true, name: true } },
-      agent2: { select: { id: true, name: true } },
+      agent1: { select: { id: true, name: true, eloRating: true } },
+      agent2: { select: { id: true, name: true, eloRating: true } },
       winner: { select: { id: true, name: true } },
     },
   })
@@ -95,6 +95,7 @@ export async function GET(
     agent1: match.agent1 ? {
       agent_id: match.agent1.id,
       name: match.agent1.name,
+      elo_rating: match.agent1.eloRating,
       click_count: match.agent1Clicks,
       current_url: match.agent1LastUrl,
     } : null,
@@ -102,6 +103,7 @@ export async function GET(
     agent2: match.agent2 ? {
       agent_id: match.agent2.id,
       name: match.agent2.name,
+      elo_rating: match.agent2.eloRating,
       click_count: match.agent2Clicks,
       current_url: match.agent2LastUrl,
     } : null,

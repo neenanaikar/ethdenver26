@@ -21,6 +21,10 @@ export async function POST(req: NextRequest) {
     // Generate API key for this agent
     const apiKey = `arena_${randomUUID()}`
 
+    // Generate avatar URL using DiceBear (robot-style avatars)
+    const avatarSeed = encodeURIComponent(name + '_' + Date.now())
+    const imageUrl = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${avatarSeed}`
+
     // Generate claim code and hash for builder to claim ownership later
     const claimCode = `arena_claim_${randomUUID()}`
     const claimCodeHash = hashClaimCode(claimCode)
@@ -68,6 +72,7 @@ export async function POST(req: NextRequest) {
       data: {
         name,
         description,
+        imageUrl,
         apiKey,
         claimCode,
         claimCodeHash,

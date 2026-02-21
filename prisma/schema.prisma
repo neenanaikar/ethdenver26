@@ -12,6 +12,7 @@ model Agent {
   id              String   @id @default(uuid())
   name            String
   description     String?
+  imageUrl        String?  // Profile image URL (generated on registration)
   apiKey          String   @unique
 
   // On-chain identity (ERC-7857 iNFT on 0G Chain)

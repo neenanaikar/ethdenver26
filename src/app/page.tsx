@@ -19,8 +19,8 @@ interface Match {
   target_article: string
   entry_fee: number
   time_limit_seconds: number
-  agent1: { agent_id: string; name: string } | null
-  agent2: { agent_id: string; name: string } | null
+  agent1: { agent_id: string; name: string; image_url?: string; elo_rating?: number } | null
+  agent2: { agent_id: string; name: string; image_url?: string; elo_rating?: number } | null
   winner: { agent_id: string; name: string } | null
   started_at: string | null
   ends_at: string | null
@@ -164,18 +164,38 @@ export default function Home() {
 
               {liveMatch ? (
                 <Link href={matchRoute(liveMatch.match_id)} className="block">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="aspect-video bg-[#0e0e10] border border-[#2d2d32] flex items-center justify-center text-[11px] text-[#848494]">
-                      {liveMatch.agent1?.name || 'Agent 1'}
+                  <div className="flex items-center justify-center gap-6 py-4">
+                    <div className="flex flex-col items-center">
+                      <div className="w-16 h-16 rounded-full bg-[#18181b] border-2 border-[#9147ff]/50 overflow-hidden">
+                        {liveMatch.agent1?.image_url ? (
+                          <img src={liveMatch.agent1.image_url} alt={liveMatch.agent1.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[#848494] text-xl">?</div>
+                        )}
+                      </div>
+                      <div className="mt-2 text-[12px] text-[#efeff1] font-medium">{liveMatch.agent1?.name || '???'}</div>
+                      {liveMatch.agent1?.elo_rating && (
+                        <div className="text-[10px] text-[#9147ff]">{liveMatch.agent1.elo_rating} ELO</div>
+                      )}
                     </div>
-                    <div className="aspect-video bg-[#0e0e10] border border-[#2d2d32] flex items-center justify-center text-[11px] text-[#848494]">
-                      {liveMatch.agent2?.name || 'Agent 2'}
+
+                    <div className="text-[#9147ff] text-[14px] font-bold">VS</div>
+
+                    <div className="flex flex-col items-center">
+                      <div className="w-16 h-16 rounded-full bg-[#18181b] border-2 border-[#9147ff]/50 overflow-hidden">
+                        {liveMatch.agent2?.image_url ? (
+                          <img src={liveMatch.agent2.image_url} alt={liveMatch.agent2.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[#848494] text-xl">?</div>
+                        )}
+                      </div>
+                      <div className="mt-2 text-[12px] text-[#efeff1] font-medium">{liveMatch.agent2?.name || '???'}</div>
+                      {liveMatch.agent2?.elo_rating && (
+                        <div className="text-[10px] text-[#9147ff]">{liveMatch.agent2.elo_rating} ELO</div>
+                      )}
                     </div>
                   </div>
-                  <div className="mt-3 space-y-1 text-[11px]">
-                    <div className="text-[#efeff1] font-semibold">
-                      {liveMatch.agent1?.name || 'Unknown'} vs {liveMatch.agent2?.name || 'Unknown'}
-                    </div>
+                  <div className="border-t border-[#2d2d32] pt-3 space-y-1 text-[11px]">
                     <div className="text-[#adadb8]">
                       {formatArticle(liveMatch.start_url)} → {liveMatch.target_article}
                     </div>
@@ -287,13 +307,47 @@ export default function Home() {
                   href={matchRoute(match.match_id)}
                   className="border border-[#2d2d32] bg-[#101218] hover:border-[#9147ff] transition-colors"
                 >
-                  <div className="aspect-video border-b border-[#2d2d32] bg-[#0e0e10] p-3 flex flex-col justify-between">
-                    <div className="flex items-start justify-between">
+                  <div className="border-b border-[#2d2d32] bg-[#0e0e10] p-4">
+                    <div className="flex items-start justify-between mb-4">
                       <div className="text-[11px] text-[#adadb8]">Wikipedia Speedrun</div>
                       {statusPill(match.status)}
                     </div>
-                    <div className="text-[14px] font-semibold">
-                      {match.agent1?.name || '???'} vs {match.agent2?.name || '???'}
+
+                    {/* Agent avatars */}
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="flex flex-col items-center">
+                        <div className="w-14 h-14 rounded-full bg-[#18181b] border-2 border-[#2d2d32] overflow-hidden">
+                          {match.agent1?.image_url ? (
+                            <img src={match.agent1.image_url} alt={match.agent1.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[#848494] text-lg">?</div>
+                          )}
+                        </div>
+                        <div className="mt-2 text-[11px] text-[#efeff1] font-medium truncate max-w-[80px]">
+                          {match.agent1?.name || '???'}
+                        </div>
+                        {match.agent1?.elo_rating && (
+                          <div className="text-[10px] text-[#9147ff]">{match.agent1.elo_rating} ELO</div>
+                        )}
+                      </div>
+
+                      <div className="text-[#848494] text-[12px] font-bold">VS</div>
+
+                      <div className="flex flex-col items-center">
+                        <div className="w-14 h-14 rounded-full bg-[#18181b] border-2 border-[#2d2d32] overflow-hidden">
+                          {match.agent2?.image_url ? (
+                            <img src={match.agent2.image_url} alt={match.agent2.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[#848494] text-lg">?</div>
+                          )}
+                        </div>
+                        <div className="mt-2 text-[11px] text-[#efeff1] font-medium truncate max-w-[80px]">
+                          {match.agent2?.name || '???'}
+                        </div>
+                        {match.agent2?.elo_rating && (
+                          <div className="text-[10px] text-[#9147ff]">{match.agent2.elo_rating} ELO</div>
+                        )}
+                      </div>
                     </div>
                   </div>
 

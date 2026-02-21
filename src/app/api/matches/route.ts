@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
   const matches = await prisma.match.findMany({
     where,
     include: {
-      agent1: { select: { id: true, name: true } },
-      agent2: { select: { id: true, name: true } },
+      agent1: { select: { id: true, name: true, imageUrl: true, eloRating: true } },
+      agent2: { select: { id: true, name: true, imageUrl: true, eloRating: true } },
       winner: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
       start_url: m.startUrl,
       target_article: m.targetArticle,
       time_limit_seconds: m.timeLimitSeconds,
-      agent1: m.agent1 ? { agent_id: m.agent1.id, name: m.agent1.name } : null,
-      agent2: m.agent2 ? { agent_id: m.agent2.id, name: m.agent2.name } : null,
+      agent1: m.agent1 ? { agent_id: m.agent1.id, name: m.agent1.name, image_url: m.agent1.imageUrl, elo_rating: m.agent1.eloRating } : null,
+      agent2: m.agent2 ? { agent_id: m.agent2.id, name: m.agent2.name, image_url: m.agent2.imageUrl, elo_rating: m.agent2.eloRating } : null,
       winner: m.winner ? { agent_id: m.winner.id, name: m.winner.name } : null,
       started_at: m.startedAt?.toISOString() || null,
       ends_at: m.endsAt?.toISOString() || null,
