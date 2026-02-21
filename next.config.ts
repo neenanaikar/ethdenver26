@@ -1,8 +1,10 @@
-import type { NextConfig } from "next";
+import path from 'path'
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  // cache bust: 2026-02-20
-};
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
+}
 
-export default nextConfig;
+export default nextConfig
