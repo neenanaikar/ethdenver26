@@ -324,16 +324,26 @@ class AIWikiAgent {
 
     if (unvisited.length === 0) return links[0]
 
+    // PRIORITY: Check if target article is directly in links
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const targetNorm = normalize(this.targetArticle)
+    const directMatch = unvisited.find(l => normalize(l.text) === targetNorm)
+    if (directMatch) {
+      const reason = `Found "${this.targetArticle}" directly in links - clicking to win!`
+      console.log(`[${AGENT_NAME}] 🎯 ${reason}`)
+      this.lastThought = reason
+      return directMatch
+    }
+
     const linkList = unvisited.map((l, i) => `${i + 1}. ${l.text}`).join('\n')
 
-    // Ask for reasoning + choice
-    const prompt = `Target: "${this.targetArticle}"
-Current: "${currentArticle}"
+    // Ask AI for link choice AND reasoning
+    const prompt = `Navigate from "${currentArticle}" to "${this.targetArticle}".
 
 Links:
 ${linkList}
 
-Think briefly about which link connects best to the target, then say the number.`
+Which link is best? Say the link name and explain why it connects to "${this.targetArticle}", then give the number.`
 
     try {
       const res = await fetch(`${OLLAMA_BASE}/api/generate`, {
@@ -343,7 +353,7 @@ Think briefly about which link connects best to the target, then say the number.
           model: OLLAMA_MODEL,
           prompt,
           stream: false,
-          options: { temperature: 0.3, num_predict: 50 },
+          options: { temperature: 0.5, num_predict: 80 },
         }),
       })
 
@@ -352,18 +362,18 @@ Think briefly about which link connects best to the target, then say the number.
       const data = await res.json()
       const response = data.response?.trim() || ''
 
-      // Save the full thought for streaming
-      this.lastThought = response
-      console.log(`[${AGENT_NAME}] AI thinks: ${response}`)
+      // Extract the last number in response
+      const numbers = response.match(/\d+/g)
+      const lastNum = numbers ? numbers[numbers.length - 1] : null
 
-      // Extract the number
-      const match = response.match(/\d+/)
-
-      if (match) {
-        const idx = parseInt(match[0]) - 1
+      if (lastNum) {
+        const idx = parseInt(lastNum) - 1
         if (idx >= 0 && idx < unvisited.length) {
-          console.log(`[${AGENT_NAME}] Clicking: ${unvisited[idx].text}`)
-          return unvisited[idx]
+          const chosen = unvisited[idx]
+          this.lastThought = response
+          // Show the link clicked and the AI's reasoning
+          console.log(`[${AGENT_NAME}] Clicking "${chosen.text}" - ${response}`)
+          return chosen
         }
       }
       return null
