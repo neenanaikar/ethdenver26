@@ -22,6 +22,7 @@ export async function GET(
     id: string
     name: string
     description: string | null
+    imageUrl: string | null
     inftTokenId: string | null
     wins: number
     losses: number
@@ -40,6 +41,7 @@ export async function GET(
         id: true,
         name: true,
         description: true,
+        imageUrl: true,
         inftTokenId: true,
         wins: true,
         losses: true,
@@ -68,6 +70,7 @@ export async function GET(
         id: true,
         name: true,
         description: true,
+        imageUrl: true,
         inftTokenId: true,
         wins: true,
         losses: true,
@@ -91,6 +94,7 @@ export async function GET(
       agent_id: agent.id,
       name: agent.name,
       description: agent.description,
+      image_url: agent.imageUrl,
       inft_token_id: agent.inftTokenId,
       stats: {
         matches_played: agent.wins + agent.losses + agent.draws,

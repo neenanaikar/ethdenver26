@@ -224,9 +224,15 @@ class AIWikiAgent {
   }
 
   private async navigateWithAI(): Promise<void> {
-    const maxClicks = 30
+    // Keep navigating until match ends (time runs out or opponent wins)
+    while (true) {
+      // Check if match is still active
+      const matchStatus = await this.checkMatchStatus()
+      if (matchStatus !== 'active') {
+        console.log(`[${AGENT_NAME}] Match ended with status: ${matchStatus}`)
+        return
+      }
 
-    while (this.clickCount < maxClicks) {
       await this.page!.waitForLoadState('domcontentloaded')
 
       const currentTitle = await this.getCurrentTitle()
@@ -261,6 +267,18 @@ class AIWikiAgent {
       }
 
       await new Promise(r => setTimeout(r, 300))
+    }
+  }
+
+  private async checkMatchStatus(): Promise<string> {
+    try {
+      const res = await fetch(`${API_BASE}/api/matches/${this.matchId}`, {
+        headers: { 'Authorization': `Bearer ${this.apiKey}` },
+      })
+      const match = await res.json()
+      return match.status
+    } catch {
+      return 'active' // Assume active if we can't check
     }
   }
 

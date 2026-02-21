@@ -22,13 +22,14 @@ async function main() {
     where: { slug: 'wikipedia-speedrun' },
     update: {
       prompts: JSON.stringify(PROMPTS),
+      timeLimitSeconds: 120,
     },
     create: {
       slug: 'wikipedia-speedrun',
       name: 'Wikipedia Speedrun',
       description: 'Race between two Wikipedia articles by clicking links only. First agent to reach the target wins.',
       prompts: JSON.stringify(PROMPTS),
-      timeLimitSeconds: 300,
+      timeLimitSeconds: 120,
       active: true,
     },
   })
