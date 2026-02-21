@@ -10,7 +10,7 @@ This project is a Next.js app exposing API routes for:
 1. Install deps:
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 ```
 
 2. Set env:
@@ -23,8 +23,8 @@ cp .env.example .env
 3. Generate Prisma client and sync schema:
 
 ```bash
-npm run db:generate
-npm run db:push
+npx prisma generate
+npx prisma db push
 ```
 
 4. Start app:
@@ -32,6 +32,20 @@ npm run db:push
 ```bash
 npm run dev
 ```
+
+## Sync teammate changes into your update branch
+
+Run this from your local clone (with your GitHub remote configured):
+
+```bash
+git checkout work
+git fetch origin
+git pull --rebase origin main
+# resolve conflicts if prompted
+git push origin work
+```
+
+This keeps the UI updates on `work` while pulling the latest teammate changes from `main`.
 
 ## Deploy API endpoints (Vercel)
 
@@ -65,7 +79,7 @@ In Project Settings → Environment Variables:
 In Vercel Build & Development Settings, set:
 
 ```bash
-npm run db:generate && npm run db:push && npm run build
+npx prisma generate && npx prisma db push && npm run build
 ```
 
 This ensures Prisma client is generated and schema is applied before build.
