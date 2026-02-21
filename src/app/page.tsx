@@ -26,7 +26,7 @@ interface Match {
   ends_at: string | null
 }
 
-type Tab = 'active' | 'waiting_for_opponent' | 'complete'
+type Tab = 'active' | 'complete'
 
 function statusPill(status: Match['status']) {
   if (status === 'active') {
@@ -51,6 +51,7 @@ function formatArticle(url: string | null) {
 export default function Home() {
   const [competitions, setCompetitions] = useState<CompetitionType[]>([])
   const [matches, setMatches] = useState<Match[]>([])
+  const [allMatches, setAllMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('active')
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
@@ -59,6 +60,10 @@ export default function Home() {
 
   useEffect(() => {
     fetchCompetitions()
+    fetchAllMatches()
+    const interval = setInterval(fetchAllMatches, 5000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -66,7 +71,7 @@ export default function Home() {
     fetchMatches()
     const interval = setInterval(fetchMatches, 5000)
     return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
   async function fetchCompetitions() {
@@ -88,6 +93,16 @@ export default function Home() {
       console.error('Failed to fetch matches:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function fetchAllMatches() {
+    try {
+      const res = await fetch('/api/matches?status=active')
+      const data = await res.json()
+      setAllMatches(data.matches || [])
+    } catch (err) {
+      console.error('Failed to fetch all matches:', err)
     }
   }
 
