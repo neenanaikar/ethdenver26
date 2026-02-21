@@ -637,9 +637,10 @@ export default function MatchPage() {
     <div className="h-full flex">
       {/* LEFT: Streams side by side */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Streams area (with overlays) */}
         <div className="flex-1 flex min-h-0 relative">
 
-          {/* Match complete overlay */}
+          {/* Match complete overlay - only covers streams */}
           {isComplete && (
             <div className="absolute inset-0 bg-black/85 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center">
               <div className="text-[40px]">🏆</div>
@@ -655,12 +656,6 @@ export default function MatchPage() {
                 </>
               ) : (
                 <div className="text-[#adadb8] text-[18px] font-bold">Draw!</div>
-              )}
-              {oracleReasoning && (
-                <div className="max-w-sm bg-[#18181b] border border-[#2d2d32] p-3 text-[11px] text-[#adadb8] text-left mt-1">
-                  <div className="text-[10px] text-[#848494] uppercase tracking-wide mb-1">0G Oracle verdict</div>
-                  {oracleReasoning}
-                </div>
               )}
               <a href="/" className="mt-3 text-[11px] text-[#9147ff] hover:underline">← Watch more matches</a>
             </div>
@@ -684,35 +679,40 @@ export default function MatchPage() {
             </div>
           )}
 
-          {/* Agent 1 column */}
-          <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 relative">
-              <StreamPanel
-                agent={match.agent1}
-                frame={match.agent1 ? frames[match.agent1.agent_id] : null}
-                isWinner={winnerData?.agent_id === match.agent1?.agent_id}
-                matchStatus={match.status}
-              />
-            </div>
-            <ReasoningPanel
-              thoughts={match.agent1 ? thoughts[match.agent1.agent_id] || [] : []}
-              agentName={match.agent1?.name || 'Agent 1'}
+          {/* Agent 1 stream */}
+          <div className="flex-1 relative">
+            <StreamPanel
+              agent={match.agent1}
+              frame={match.agent1 ? frames[match.agent1.agent_id] : null}
+              isWinner={winnerData?.agent_id === match.agent1?.agent_id}
+              matchStatus={match.status}
             />
           </div>
 
           {/* Divider */}
           <div className="w-[2px] bg-[#2d2d32]" />
 
-          {/* Agent 2 column */}
-          <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-1 relative">
-              <StreamPanel
-                agent={match.agent2}
-                frame={match.agent2 ? frames[match.agent2.agent_id] : null}
-                isWinner={winnerData?.agent_id === match.agent2?.agent_id}
-                matchStatus={match.status}
-              />
-            </div>
+          {/* Agent 2 stream */}
+          <div className="flex-1 relative">
+            <StreamPanel
+              agent={match.agent2}
+              frame={match.agent2 ? frames[match.agent2.agent_id] : null}
+              isWinner={winnerData?.agent_id === match.agent2?.agent_id}
+              matchStatus={match.status}
+            />
+          </div>
+        </div>
+
+        {/* Reasoning panels (below streams, not covered by overlays) */}
+        <div className="flex">
+          <div className="flex-1">
+            <ReasoningPanel
+              thoughts={match.agent1 ? thoughts[match.agent1.agent_id] || [] : []}
+              agentName={match.agent1?.name || 'Agent 1'}
+            />
+          </div>
+          <div className="w-[2px] bg-[#2d2d32]" />
+          <div className="flex-1">
             <ReasoningPanel
               thoughts={match.agent2 ? thoughts[match.agent2.agent_id] || [] : []}
               agentName={match.agent2?.name || 'Agent 2'}
