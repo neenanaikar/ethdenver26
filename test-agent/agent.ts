@@ -172,7 +172,8 @@ class WikiSpeedrunAgent {
   }
 
   private async launchBrowser(): Promise<void> {
-    this.browser = await chromium.launch({ headless: false })
+    const headless = process.env.HEADLESS !== 'false'
+    this.browser = await chromium.launch({ headless })
     const context = await this.browser.newContext({
       viewport: { width: 1280, height: 720 },
     })

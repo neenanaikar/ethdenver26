@@ -40,11 +40,21 @@ export async function POST(req: NextRequest) {
         const metadataUri = `${BASE_URL}/api/agents/metadata/${randomUUID()}`
 
         // Mint to contract (unclaimed state) with our generated token ID
-        const tx = await contract.mint(BigInt(generatedTokenId), metadataUri, claimCodeHash)
-        await tx.wait()
+        // Fire-and-forget: don't block registration on chain confirmation
+        contract.mint(BigInt(generatedTokenId), metadataUri, claimCodeHash)
+          .then((tx: { wait: () => Promise<unknown>; hash: string }) => {
+            console.log(`[Register] Mint tx submitted: ${tx.hash}`)
+            return tx.wait()
+          })
+          .then(() => {
+            console.log(`[Register] Minted iNFT #${generatedTokenId} for agent "${name}"`)
+          })
+          .catch((err: Error) => {
+            console.error(`[Register] Mint failed for agent "${name}":`, err.message)
+          })
 
+        // Optimistically set token ID (mint is in progress)
         inftTokenId = generatedTokenId
-        console.log(`[Register] Minted iNFT #${inftTokenId} for agent "${name}"`)
       } catch (contractError) {
         console.error('[Register] Contract mint failed:', contractError)
         // Continue without on-chain minting - can retry later

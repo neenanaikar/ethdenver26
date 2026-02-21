@@ -8,6 +8,7 @@ import { spawn } from 'child_process'
 import path from 'path'
 
 const AGENT_SCRIPT = path.join(__dirname, 'agent.ts')
+const API_BASE = process.env.API_BASE || 'http://localhost:3000'
 
 async function main() {
   console.log('='.repeat(50))
@@ -22,7 +23,7 @@ async function main() {
     env: {
       ...process.env,
       AGENT_NAME: 'Agent_Alpha',
-      API_BASE: 'http://localhost:3000',
+      API_BASE,
     },
     stdio: 'pipe',
   })
@@ -44,7 +45,7 @@ async function main() {
     env: {
       ...process.env,
       AGENT_NAME: 'Agent_Beta',
-      API_BASE: 'http://localhost:3000',
+      API_BASE,
     },
     stdio: 'pipe',
   })

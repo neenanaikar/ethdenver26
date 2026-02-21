@@ -404,36 +404,11 @@ export default function MatchPage() {
   }, [match?.status, matchId])
 
   useEffect(() => {
-    // Connect to same origin with explicit settings for Railway
-    const socket = io({
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    })
+    const socket = io()
     socketRef.current = socket
 
     socket.on('connect', () => {
-      console.log('[Socket] Connected:', socket.id)
-      console.log('[Socket] Joining match:', matchId)
       socket.emit('join_match', matchId)
-    })
-
-    socket.on('joined', (data) => {
-      console.log('[Socket] Successfully joined room:', data)
-    })
-
-    socket.on('connect_error', (err) => {
-      console.error('[Socket] Connection error:', err.message)
-    })
-
-    socket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected:', reason)
-    })
-
-    // Debug: log all incoming events
-    socket.onAny((event, ...args) => {
-      console.log('[Socket] Event received:', event, args.length > 0 ? '(with data)' : '')
     })
 
     socket.on('match_start', async () => {
