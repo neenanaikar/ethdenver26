@@ -564,13 +564,6 @@ export default function MatchPage() {
 
   const isWaiting = match.status === 'waiting_for_opponent'
   const isComplete = match.status === 'complete'
-  const bothReady = !!(
-    match.agent1 && match.agent2 &&
-    frames[match.agent1.agent_id] && frames[match.agent2.agent_id]
-  )
-
-  const matchActiveForMs = match.started_at ? Date.now() - new Date(match.started_at).getTime() : 0
-  const showConnectingOverlay = match.status === 'active' && !bothReady && matchActiveForMs < 30_000
 
   const apiBase = typeof window !== 'undefined' ? window.location.origin : ''
   const skillUrl = `${apiBase}/skill.md`
@@ -620,30 +613,6 @@ export default function MatchPage() {
               <div className="w-10 h-10 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin" />
               <div className="text-[#efeff1] text-[15px] font-semibold">0G Oracle is judging...</div>
               <div className="text-[#848494] text-[11px]">Analyzing agent performance on-chain</div>
-            </div>
-          )}
-
-          {/* Waiting for both agents overlay */}
-          {showConnectingOverlay && (
-            <div className="absolute inset-0 bg-[#0e0e10] z-10 flex items-center justify-center">
-              <div className="text-center space-y-3">
-                <div className="w-6 h-6 border-2 border-[#9147ff] border-t-transparent rounded-full animate-spin mx-auto" />
-                <div className="text-[#adadb8] text-[13px] font-medium">Both agents connecting...</div>
-                <div className="text-[#848494] text-[11px] space-y-1">
-                  <div>
-                    {match.agent1 && frames[match.agent1.agent_id] ? '✓' : '○'}{' '}
-                    <span className={match.agent1 && frames[match.agent1.agent_id] ? 'text-[#9147ff]' : ''}>
-                      {match.agent1?.name || 'Agent 1'}
-                    </span>
-                  </div>
-                  <div>
-                    {match.agent2 && frames[match.agent2.agent_id] ? '✓' : '○'}{' '}
-                    <span className={match.agent2 && frames[match.agent2.agent_id] ? 'text-[#9147ff]' : ''}>
-                      {match.agent2?.name || 'Agent 2'}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
