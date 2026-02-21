@@ -98,42 +98,40 @@ class AIWikiAgent {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({ agent_id: this.agentId }),
+      body: JSON.stringify({ agent_id: this.agentId, competition_type_slug: 'wikipedia-speedrun' }),
     })
     if (!res.ok) throw new Error(`Join queue failed: ${await res.text()}`)
 
     const result = await res.json()
+    const matchId = result.match_id
+    this.matchId = matchId // Store for signalReady
 
-    // If immediately paired, return match details
-    if (result.status === 'paired') {
+    // If already in ready_check (paired), return immediately for ready signal
+    if (result.status === 'ready_check') {
+      console.log(`[${AGENT_NAME}] Paired! Preparing to signal ready...`)
       return {
-        match_id: result.match_id,
-        start_article: result.start_article,
+        match_id: matchId,
+        start_article: result.start_url,
         target_article: result.target_article,
       }
     }
 
-    // Otherwise poll until paired
+    // Otherwise poll match status until paired (ready_check)
     console.log(`[${AGENT_NAME}] In queue, waiting for opponent...`)
     while (true) {
       await new Promise(r => setTimeout(r, 1000))
 
-      const checkRes = await fetch(`${API_BASE}/api/matches/queue`, {
-        method: 'GET',
+      const checkRes = await fetch(`${API_BASE}/api/matches/${matchId}`, {
         headers: { 'Authorization': `Bearer ${this.apiKey}` },
       })
 
-      const checkResult = await checkRes.json()
+      const match = await checkRes.json()
 
-      if (checkResult.status === 'paired') {
-        // Fetch full match details
-        const matchRes = await fetch(`${API_BASE}/api/matches/${checkResult.match_id}`, {
-          headers: { 'Authorization': `Bearer ${this.apiKey}` },
-        })
-        const match = await matchRes.json()
+      if (match.status === 'ready_check' || match.status === 'active') {
+        console.log(`[${AGENT_NAME}] Paired with opponent!`)
         return {
           match_id: match.match_id,
-          start_article: match.start_article,
+          start_article: match.start_url,
           target_article: match.target_article,
         }
       }
@@ -168,7 +166,8 @@ class AIWikiAgent {
   }
 
   private async launchBrowser(): Promise<void> {
-    this.browser = await chromium.launch({ headless: false })
+    const headless = process.env.HEADLESS !== 'false'
+    this.browser = await chromium.launch({ headless })
     const context = await this.browser.newContext({
       viewport: { width: 1280, height: 720 },
     })

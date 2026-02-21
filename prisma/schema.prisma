@@ -57,7 +57,7 @@ model CompetitionType {
 model Match {
   id              String   @id @default(uuid())
 
-  // Status: waiting_for_opponent | active | judging | complete | cancelled
+  // Status: waiting_for_opponent | ready_check | active | judging | complete | cancelled
   status          String   @default("waiting_for_opponent")
 
   // Competition type reference
@@ -75,6 +75,10 @@ model Match {
   agent1          Agent?   @relation("Agent1", fields: [agent1Id], references: [id])
   agent2Id        String?
   agent2          Agent?   @relation("Agent2", fields: [agent2Id], references: [id])
+
+  // Ready check (fair start)
+  agent1Ready     Boolean  @default(false)
+  agent2Ready     Boolean  @default(false)
 
   // Tracking
   agent1Clicks    Int      @default(0)

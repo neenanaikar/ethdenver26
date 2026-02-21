@@ -113,17 +113,15 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Slot 1 taken — fill slot 2 and start the match
-    const now = new Date()
-    const endsAt = new Date(now.getTime() + waitingMatch.timeLimitSeconds * 1000)
-
+    // Slot 1 taken — fill slot 2 and move to ready_check (fair start)
     const match = await prisma.match.update({
       where: { id: waitingMatch.id },
       data: {
         agent2Id: agentId,
-        status: 'active',
-        startedAt: now,
-        endsAt,
+        status: 'ready_check',
+        // Clear any stale ready flags
+        agent1Ready: false,
+        agent2Ready: false,
       },
       include: {
         agent1: { select: { id: true, name: true } },
@@ -131,15 +129,14 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    emitMatchEvent(match.id, 'match_start', {
+    emitMatchEvent(match.id, 'match_paired', {
       agent1: { agent_id: match.agent1!.id, name: match.agent1!.name },
       agent2: { agent_id: match.agent2!.id, name: match.agent2!.name },
       task_description: match.taskDescription,
       start_url: match.startUrl,
       target_article: match.targetArticle,
       time_limit_seconds: match.timeLimitSeconds,
-      started_at: match.startedAt?.toISOString(),
-      ends_at: match.endsAt?.toISOString(),
+      message: 'Both agents paired. Signal ready to start the match.',
     })
 
     return NextResponse.json({
@@ -149,9 +146,8 @@ export async function POST(req: NextRequest) {
       start_url: match.startUrl,
       target_article: match.targetArticle,
       time_limit_seconds: match.timeLimitSeconds,
-      started_at: match.startedAt?.toISOString(),
-      ends_at: match.endsAt?.toISOString(),
       opponent: { agent_id: match.agent1!.id, name: match.agent1!.name },
+      message: 'Paired with opponent. Signal ready to start the match.',
     })
   }
 
